@@ -39,7 +39,7 @@ jobs:
       - name: keep the budgets beside the reports
         if: always()
         run: mkdir -p ci-metrics/budgets && cp tools/*budgets*.json ci-metrics/budgets/
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: ci-metrics-test
@@ -118,13 +118,13 @@ jobs:
       - name: stop the server and keep the evidence
         if: always()
         run: node tools/kr-verify.mjs down
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: ci-metrics-boot
           path: shots/memory/ci/result.json
           retention-days: 30
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: boot-smoke-evidence
@@ -158,7 +158,7 @@ jobs:
       - name: stop the server
         if: always()
         run: node tools/kr-verify.mjs down
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: memory-result
@@ -191,7 +191,7 @@ jobs:
       - name: stop the server
         if: always()
         run: node tools/kr-verify.mjs down
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: memory-lowmem-result
@@ -260,7 +260,7 @@ jobs:
       - name: stop the server
         if: always()
         run: node tools/kr-verify.mjs down
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: invariants-${{ matrix.arm }}
