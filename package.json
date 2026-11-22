@@ -34,7 +34,7 @@
     "bench:verify": "tsx tools/performance/wire-parity.mts && tsx tools/performance/matrix-parity.mts && tsx tools/performance/geometry-parity.mts && tsx tools/performance/static-http.mts && tsx tools/performance/splat-viewport.mts"
   },
   "dependencies": {
-    "@fails-components/webtransport": "1.6.11",
+    "@fails-components/webtransport": "1.6.12",
     "mongodb": "^7.7.0",
     "n8ao": "2.0.1",
     "postprocessing": "6.39.5",
