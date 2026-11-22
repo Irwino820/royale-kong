@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@fails-components/webtransport": "1.6.11",
-    "mongodb": "^7.7.0",
+    "mongodb": "^7.9.1",
     "n8ao": "2.0.1",
     "postprocessing": "6.39.5",
     "three": "0.186.0",
