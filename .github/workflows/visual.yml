@@ -78,7 +78,7 @@ jobs:
         run: |
           npx tsx tools/performance/visual.mts diff --base shots/visual/main --cand shots/visual/pr --out shots/visual/diff || true
           { echo "### Visual diff, lobby views (report-only)"; cat shots/visual/diff/summary.md 2>/dev/null || echo "no summary"; } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: visual-lobby
@@ -115,7 +115,7 @@ jobs:
           npx tsx tools/performance/visual.mts far --url http://127.0.0.1:3123 --out shots/visual/far --pois "$pois" || true
           node tools/kr-verify.mjs down
           { echo "### Far impostors vs built POIs, shard $SHARD of 4 (report-only)"; cat shots/visual/far/summary.md 2>/dev/null || echo "no summary"; } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: visual-far-${{ matrix.shard }}
