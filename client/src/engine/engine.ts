@@ -603,6 +603,7 @@ export class Engine implements WorldCtx {
         if (done) this.idle.splice(i--, 1);
       }
     }
+    if (!this.shotMode && typeof document !== "undefined" && document.hidden) return;
     this.occlusion.update(this.camera);
     this.far.update();
     this.statics.update();

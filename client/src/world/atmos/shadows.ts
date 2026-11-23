@@ -658,22 +658,22 @@ export class SunShadows {
 
   /** per frame: periodic material sweep; re-bake the far map while the world is still streaming in */
   update() {
-    // the no-caster subtrees + static caster units: refreshed every 30 frames while the world streams in, every 60 after
-    // (new casters streaming into a pruned group wait ≤ 0.5 s)
-    // (every 120 frames after the load window, half a period after the sweep — the two full-scene walks never share
-    // a frame)
-    const streaming = performance.now() < this.streamUntil || !this.streamUntil;
-    if (streaming ? this.frame % 30 === 0 : this.frame % 120 === 60) this.findNoCasterRoots();
-    // material sweep: every 24 frames while the world streams in, every 120 after (a scene traversal of ~2k objects)
-    const every = performance.now() < this.streamUntil || !this.streamUntil ? 24 : 120;
-    if ((this.frame++ % every) === 0) {
+    // the no-caster subtrees + static caster units: refreshed every 48 frames (offset 24) while the world streams in,
+    // every 240 (offset 120) after — half a period out of phase with the material sweep so the two full-scene walks
+    // never share a frame, even during streaming
+    const now = performance.now();
+    const streaming = now < this.streamUntil || !this.streamUntil;
+    const every = streaming ? 48 : 240;
+    const slot = this.frame++ % every;
+    if (slot === (every >> 1)) this.findNoCasterRoots();
+    // material sweep: every 48 frames while the world streams in, every 240 after (a scene traversal of ~2k objects)
+    if (slot === 0) {
       const n = this.sweep();
       if (n !== this.farCasterKey) {
-        // new static casters appeared (async POI content): re-bake, but only a few times and never back-to-back
+        // new static casters appeared (async POI content): coalesce streaming re-bakes (at most 2, ≥ 5 s apart)
         const first = this.farCasterKey < 0;
         this.farCasterKey = n;
-        const now = performance.now();
-        if (!first && this.farBakes < 6 && now < this.streamUntil && now - this.farLastBake > 1500) this.requestFarBake();
+        if (!first && this.farBakes < 2 && now < this.streamUntil && now - this.farLastBake > 5000) this.requestFarBake();
       }
     }
   }
