@@ -34,7 +34,7 @@ export interface Preferences {
 }
 export const PREFERENCE_KEY = "kr-preferences-v1";
 export function defaults(): Preferences {
-  return { sensitivity: 1, adsSensitivity: 1, scopeSensitivity: 1, invertY: false, aimToggle: false, crouchToggle: false, sprintToggle: false, autoSprint: false, autoSortHeals: false, autoSortWeapons: false, autoUpgradeWeapons: false, slotPrefs: ["ar", "shotgun", "smg", "consumable", "consumable"], master: 0.9, combat: 1, ui: 1, ambience: 1, radio: 1, dynamicRange: "full", reducedMotion: false, hudScale: 1, uiScale: 1, visualSound: true, minimapRotate: false, binds: structuredClone(DEFAULT_BINDS), pad: padDefaults() };
+  return { sensitivity: 1, adsSensitivity: 1, scopeSensitivity: 1, invertY: false, aimToggle: false, crouchToggle: false, sprintToggle: false, autoSprint: false, autoSortHeals: false, autoSortWeapons: false, autoUpgradeWeapons: false, slotPrefs: ["ar", "shotgun", "smg", "consumable", "consumable"], master: 0.9, combat: 1, ui: 1, ambience: 1, radio: 1, dynamicRange: "full", reducedMotion: false, hudScale: 1, uiScale: 1, visualSound: false, minimapRotate: false, binds: structuredClone(DEFAULT_BINDS), pad: padDefaults() };
 }
 const RANGES = { sensitivity: [0.2, 3], adsSensitivity: [0.2, 2], scopeSensitivity: [0.2, 2], master: [0, 1], combat: [0, 1], ui: [0, 1], ambience: [0, 1], radio: [0, 1], hudScale: [1, 1.5], uiScale: [1, 1.5] } as const;
 const FLAGS = ["invertY", "aimToggle", "crouchToggle", "sprintToggle", "autoSprint", "autoSortHeals", "autoSortWeapons", "autoUpgradeWeapons", "reducedMotion", "visualSound", "minimapRotate"] as const;

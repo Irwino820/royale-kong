@@ -158,7 +158,7 @@ export function accessibilityCategory(): Category {
     id: "a11y", name: "Accessibility",
     sections: [{ id: "comfort", name: "Comfort & readability", rows: () => [
       toggle("visualSound", "Visualize sound effects", () => ({ eb: "Accessibility", title: "Visualize sound effects", viz: "sound",
-        body: ["Shows a radial indicator ring around the crosshair for nearby footsteps, gunshots, chests, and vehicles."] })),
+        body: ["Shows a radial indicator ring around the crosshair for nearby footsteps, gunshots, chests, and vehicles. Off by default."] })),
       toggle("reducedMotion", "Reduced camera motion", () => ({ eb: "Comfort", title: "Reduced camera motion", viz: "hud",
         body: ["Removes decorative shake, bob, landing dip and camera roll, and stills menu motion. Aim and gameplay recoil remain accurate."] })),
       slider("hudScale", "HUD size", 1, 1.5, 0.05, pct, () => ({ eb: "Readability", title: "HUD size", viz: "hud", body: ["Increase health, inventory and match information. The preview uses the real HUD parts."] })),
@@ -167,6 +167,6 @@ export function accessibilityCategory(): Category {
       toggle("minimapRotate", "Rotate minimap", () => ({ eb: "Minimap", title: "Rotate minimap", viz: "hud",
         body: ["The map turns as you look around so the way you face is always up (an N marks north on the rim). Off: north stays up and your arrow turns."] })),
     ] }],
-    reset: { body: "Reduced camera motion, HUD size and menu text size go back to their defaults. Other categories are not changed.", run: () => preferences.reset("accessibility") },
+    reset: { body: "Visualize sound effects, reduced camera motion, HUD size, menu text size and minimap rotation go back to their defaults. Other categories are not changed.", run: () => preferences.reset("accessibility") },
   };
 }
