@@ -12,7 +12,7 @@ import {
 } from "./const";
 import { CONSUMABLES } from "../world/map";
 import * as islet from "../pois/lobby-islet";
-import { chestRegen, IK, lootReachable, placeLoot, REGEN, rollAmmoBox, rollChestContents, settleLoot, tossClear, type Chest, type Item } from "./loot";
+import { chestRegen, IK, lootReachable, placeLoot, REGEN, rollAmmoBox, rollChestContents, rollSupplyDropContents, settleLoot, tossClear, type Chest, type Item } from "./loot";
 import { aimedItem, standNear } from "./pickup";
 const NO_STANDS: ReadonlyArray<{ x: number; y: number; z: number }> = [];
 import {
@@ -563,6 +563,7 @@ export class Match {
     this.stepRockets();
     this.stepBombs();
     this.stepCovers();
+    this.stepSupplyDrops();
     if (this.econ && this.phase === Phase.Play) this.econ.step();
     this.stepRespawns();
     if (this.phase === Phase.Play) this.checkEnd();
@@ -832,6 +833,32 @@ export class Match {
     const w = this.covers.byId(id); if (!w || dmg <= 0 || w.perm) return;
     w.hp -= dmg;
     if (w.hp <= 0) { this.covers.remove(id); this.ev.coverEnd(id, 1); } else this.ev.coverHit(id, w.hp);
+  }
+  private supplyDrops: Chest[] = [];
+  private nextSupplyAt = 45;
+  private supplyCount = 0;
+  private stepSupplyDrops() {
+    if (this.phase !== Phase.Play || this.range) return;
+    for (let i = 0; i < this.supplyDrops.length; i++) {
+      const c = this.supplyDrops[i];
+      if (!c.opened && c.targetY !== undefined && c.y > c.targetY) c.y = Math.max(c.targetY, c.y - 12 * DT);
+    }
+    if (this.time < this.nextSupplyAt || this.supplyCount >= 3) return;
+    this.nextSupplyAt += 90;
+    for (let tries = 0; tries < 8; tries++) {
+      const a = this.rng.next() * Math.PI * 2;
+      const r = Math.sqrt(this.rng.next()) * this.storm.r * 0.55;
+      const x = this.storm.cx + dmath.cos(a) * r;
+      const z = this.storm.cz + dmath.sin(a) * r;
+      const gy = this.world.ground(x, z);
+      if (gy <= 0.5) continue;
+      const c: Chest = { id: this.chests.length, x, y: gy + 110, z, targetY: gy, yaw: this.rng.next() * Math.PI * 2, rarity: 4, opened: false, poi: -1, supply: true };
+      this.chests.push(c);
+      this.supplyDrops.push(c);
+      this.supplyCount++;
+      this.ev.supplyDrop(c.id, c.x, c.y, c.z, gy, c.yaw);
+      break;
+    }
   }
   private stepCovers() {
     if (this.covers.n === 0) return;
@@ -1266,7 +1293,7 @@ export class Match {
     let best: Chest | null = null, bd = Infinity;
     const fx = -dmath.sin(p.yaw), fz = -dmath.cos(p.yaw);
     for (const c of this.chests) {
-      if (c.opened) continue;
+      if (c.opened || (c.supply && c.targetY !== undefined && c.y > c.targetY + 0.5)) continue;
       const dx = c.x - p.x, dz = c.z - p.z, d = dmath.hypot(dx, dz);
       if (d > CHEST_OPEN_DIST + 0.6) continue;
       const score = d * (1.35 - 0.5 * (d > 1e-3 ? (dx * fx + dz * fz) / d : 1));
@@ -1279,7 +1306,7 @@ export class Match {
     if (best) {
       best.opened = true; best.openedAt = this.time; this.ev.chest(best.id, p.id);
       const rng = new Rng(this.seed ^ (best.id * 2654435761) ^ this.tick);
-      const contents = best.box ? rollAmmoBox(rng) : rollChestContents(rng, best.rarity, best.poi);
+      const contents = best.supply ? rollSupplyDropContents(rng) : best.box ? rollAmmoBox(rng) : rollChestContents(rng, best.rarity, best.poi);
       this.spillChest(best, p, contents);
       return true;
     }
@@ -1310,6 +1337,22 @@ export class Match {
     for (const it of this.items) { if (it.taken || (kind >= 0 && it.kind !== kind)) continue; const d = dmath.hypot3(it.x - p.x, it.z - p.z, (it.y - p.y) * 0.6); if (d < bd && (this.range || lootReachable(this.world, p.x, p.y, p.z, it.x, it.y, it.z))) { bd = d; best = it; } }
     return best;
   }
+  private autoPickupWeapon(p: Player, it: Item) {
+    if (hasEmptySlotFast(p) && !carriesWeapon(p, it.sub)) { this.takeItem(p, it, false); return; }
+    if (p.autoUpgrade && p.useT <= 0 && p.cookT <= 0) {
+      for (let i = 0; i < p.slots.length; i++) {
+        const cur = p.slots[i];
+        if (cur.kind !== SK.Weapon || cur.id !== it.sub || cur.rarity >= it.rarity) continue;
+        if (!this.range) this.spawnItem(IK.Weapon, cur.id, cur.rarity, 1, p.x, p.y, p.z, 0.8, p.id).loaded = cur.mag;
+        cur.rarity = it.rarity;
+        cur.mag = it.loaded !== undefined ? it.loaded : WEAPON_DEFS[WEAPONS[it.sub]].mag;
+        it.taken = true;
+        this.ev.takeItem(it.id, p.id);
+        this.onInventory(p.id);
+        break;
+      }
+    }
+  }
   private autoPickup(p: Player) {
     // clear dropper guard on any item this player dropped once they walk away (O(drops) instead of O(all items))
     const drops = this.droppedBy;
@@ -1329,8 +1372,8 @@ export class Match {
         const dx = it.x - p.x, dz = it.z - p.z, d2 = dx * dx + dz * dz;
         if (d2 > PICKUP_R2 || it.y - p.y < -1.3 || it.y - p.y > 1.5) continue;
         if (!this.range && !lootReachable(this.world, p.x, p.y, p.z, it.x, it.y, it.z, !p.bot)) continue;
-        // walking over a gun you already carry (same weapon, any rarity) never fills a second slot with it — take it with E
-        if (it.kind === IK.Weapon) { if (hasEmptySlotFast(p) && !carriesWeapon(p, it.sub)) this.takeItem(p, it, false); }
+        // walking over a gun you already carry (same weapon, any rarity) never fills a second slot with it — take it with E (unless autoUpgrade upgrades a lower-rarity copy)
+        if (it.kind === IK.Weapon) this.autoPickupWeapon(p, it);
         // bots never use bombs / crate walls: they leave them for the humans instead of filling slots with them
         else if (p.bot && it.kind === IK.Consumable && !CONSUMABLE_DEFS[CONSUMABLES[it.sub]].hp && !CONSUMABLE_DEFS[CONSUMABLES[it.sub]].shield) continue;
         else this.takeItem(p, it, false);
@@ -1342,7 +1385,7 @@ export class Match {
       const dx = it.x - p.x, dz = it.z - p.z, d2 = dx * dx + dz * dz;
       if (d2 > PICKUP_R2 || it.y - p.y < -1.3 || it.y - p.y > 1.5) continue;
       if (!this.range && !lootReachable(this.world, p.x, p.y, p.z, it.x, it.y, it.z, !p.bot)) continue;
-      if (it.kind === IK.Weapon) { if (hasEmptySlotFast(p) && !carriesWeapon(p, it.sub)) this.takeItem(p, it, false); }
+      if (it.kind === IK.Weapon) this.autoPickupWeapon(p, it);
       else if (p.bot && it.kind === IK.Consumable && !CONSUMABLE_DEFS[CONSUMABLES[it.sub]].hp && !CONSUMABLE_DEFS[CONSUMABLES[it.sub]].shield) continue;
       else this.takeItem(p, it, false);
     }
@@ -1354,6 +1397,7 @@ export class Match {
     if (op === 1) { if (invMove(p, a, b)) this.onInventory(p.id); return; }
     if (op === 3) { if (this.econ && (this.phase === Phase.Play || this.phase === Phase.Warmup)) this.econ.buy(p, a, b); return; }
     if (op === 4) { if (this.phase === Phase.Play) this.spectateOp(p, a); return; }   // INV.Spectate
+    if (op === 5) { p.autoUpgrade = a !== 0; return; }   // INV.AutoUpgrade
     if (op !== 2) return;
     const s = invDrop(p, a); if (!s) return;
     const fx = p.x - dmath.sin(p.yaw) * 1.2, fz = p.z - dmath.cos(p.yaw) * 1.2;   // a step in front, where you can see it

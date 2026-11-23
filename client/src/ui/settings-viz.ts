@@ -8,6 +8,7 @@ import type { Engine } from "../engine/engine";
 import type { Display, Level } from "../engine/display";
 import { preferences } from "../settings/preferences";
 import { hfov } from "./settings-model";
+import { itemIconUrl } from "./icons";
 
 export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
 const caption = (t: string) => `<div class="tn-set-cap tn-eyebrow">${esc(t)}</div>`;
@@ -33,6 +34,69 @@ export function speakerViz(): string {
   const waves = [0, 1, 2].map((i) => `<path class="${i < n ? "on" : "off"}" d="M${130 + i * 26} ${50 - i * 14}a${40 + i * 26} ${40 + i * 26} 0 0 1 0 ${60 + i * 28}"/>`).join("");
   return `<svg class="tn-set-speaker" viewBox="0 0 280 160" aria-hidden="true"><path class="body" d="M40 60h30l40-32v104L70 100H40z"/>
     ${waves}${m === 0 ? '<path class="mute" d="M140 55l50 50M190 55l-50 50"/>' : ""}</svg>${caption(`Master ${m}%`)}`;
+}
+
+/** live radial preview for Visualize sound effects (crosshair + footsteps, gunshots, chests, vehicles) */
+export function soundViz(): string {
+  const on = preferences.value.visualSound;
+  const op = on ? "1" : "0.25";
+  return `<div class="tn-set-fig"><svg viewBox="0 0 280 184" style="width:250px;height:auto" aria-hidden="true">
+    <circle cx="140" cy="92" r="52" fill="none" stroke="var(--kong-rule)" stroke-width="2" stroke-dasharray="4 4"/>
+    <path d="M140 80v8M140 96v8M128 92h8M144 92h8" stroke="var(--kong-text)" stroke-width="2.5" stroke-linecap="round"/>
+    <g opacity="${op}">
+      <!-- Top: Gunshot burst -->
+      <path d="M120 44a52 52 0 0 1 40 0" fill="none" stroke="var(--kong-danger)" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="140" cy="20" r="14" fill="var(--kong-bg)" stroke="var(--kong-outline)" stroke-width="2"/>
+      <path d="M140 10l2.4 5.8 6.1-.8-3.7 5 3.7 5-6.1-.8L140 30l-2.4-5.8-6.1.8 3.7-5-3.7-5 6.1.8z" fill="var(--kong-danger)"/>
+      <!-- Right: Chest -->
+      <path d="M188 72a52 52 0 0 1 0 40" fill="none" stroke="var(--kong-accent)" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="212" cy="92" r="14" fill="var(--kong-bg)" stroke="var(--kong-outline)" stroke-width="2"/>
+      <path d="M204 89c0-3 3.5-5 8-5s8 2 8 5v9h-16v-9z" fill="var(--kong-accent)"/>
+      <path d="M204 91h16" stroke="var(--kong-bg)" stroke-width="1.8"/>
+      <rect x="210.5" y="90" width="3" height="4" rx="1" fill="var(--kong-bg)"/>
+      <!-- Left: Footsteps -->
+      <path d="M92 112a52 52 0 0 1 0-40" fill="none" stroke="var(--kong-text)" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="68" cy="92" r="14" fill="var(--kong-bg)" stroke="var(--kong-outline)" stroke-width="2"/>
+      <ellipse cx="64" cy="90" rx="2.6" ry="4.6" transform="rotate(-10 64 90)" fill="var(--kong-text)"/>
+      <ellipse cx="64.5" cy="97.5" rx="2.2" ry="2" fill="var(--kong-text)"/>
+      <ellipse cx="72" cy="87" rx="2.6" ry="4.6" transform="rotate(10 72 87)" fill="var(--kong-text)"/>
+      <ellipse cx="71.5" cy="94.5" rx="2.2" ry="2" fill="var(--kong-text)"/>
+      <!-- Bottom: Vehicle steering wheel -->
+      <path d="M160 140a52 52 0 0 1-40 0" fill="none" stroke="var(--kong-sky)" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="140" cy="164" r="14" fill="var(--kong-bg)" stroke="var(--kong-outline)" stroke-width="2"/>
+      <circle cx="140" cy="164" r="8" fill="none" stroke="var(--kong-sky)" stroke-width="2.4"/>
+      <circle cx="140" cy="164" r="2.2" fill="var(--kong-sky)"/>
+      <path d="M132 164h16M140 164v8" stroke="var(--kong-sky)" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+  </svg>${caption(on ? "On · Shot (red) · Chest (gold) · Steps (white) · Vehicle (blue)" : "Off · Radial sound ring hidden")}</div>`;
+}
+
+const SLOT_SHORT: Record<string, [string, string, string | null]> = {
+  any: ["ANY", "var(--kong-text-muted)", null],
+  ar: ["AR", "var(--kong-accent)", "ar"],
+  shotgun: ["SHOT", "var(--kong-warning)", "shotgun"],
+  smg: ["SMG", "var(--kong-sky)", "smg"],
+  sniper: ["SNIPER", "var(--kong-rarity-rare)", "sniper"],
+  rocket: ["ROCKET", "var(--kong-danger)", "rocket"],
+  consumable: ["HEAL", "var(--kong-success)", "banana"],
+};
+
+/** live 5-slot hotbar preview for Preferred Item Slots */
+export function slotsViz(): string {
+  const p = preferences.value;
+  const active = p.autoSortWeapons || p.autoSortHeals;
+  const cards = p.slotPrefs.map((pref, i) => {
+    const eff = p.autoSortWeapons ? pref : p.autoSortHeals && i >= 3 ? "consumable" : "any";
+    const [lbl, col, iconId] = SLOT_SHORT[eff] ?? SLOT_SHORT.any;
+    const body = iconId
+      ? `<img src="${esc(itemIconUrl(iconId))}" alt="${lbl}" style="width:42px;height:42px;object-fit:contain;display:block">`
+      : `<span style="font-size:12px;font-weight:900;color:${col};line-height:42px;letter-spacing:.04em">${lbl}</span>`;
+    return `<div style="display:grid;place-items:center;gap:2px;padding:8px 4px;border-radius:10px;background:var(--kong-bg);border:2px solid ${eff === "any" ? "var(--kong-rule)" : col}">
+      <span style="font-size:10px;font-weight:900;color:var(--kong-text-muted)">${i + 1}</span>
+      ${body}
+    </div>`;
+  }).join("");
+  return `<div class="tn-set-fig" style="width:100%"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;opacity:${active ? 1 : 0.4}">${cards}</div>${caption(active ? "Items auto-sort into these slots on pickup" : "Enable Preferred item slots or Consumables to right slots")}</div>`;
 }
 
 /** the field of view: the game stores the vertical angle; the wedge is the horizontal one at 16:9, dashed = 90° */
