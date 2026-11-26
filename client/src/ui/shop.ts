@@ -14,8 +14,8 @@ import { device } from "../settings/device";
 import { glyph, PB, stickGlyph } from "../settings/pad";
 import type { PadOwner } from "./padnav";
 
-export interface ShopOffer { id: number; name: string; desc: string; price: number; icon: string; ok: boolean; why?: string }
-export interface ShopView { cash: number; title: string; sub: string; offers: ShopOffer[] }
+export interface ShopOffer { id: number; name: string; desc: string; price: number; origPrice?: number; icon: string; ok: boolean; why?: string }
+export interface ShopView { cash: number; title: string; sub: string; saleLeft?: number; offers: ShopOffer[] }
 export interface ShopScreen {
   el: HTMLElement; readonly open: boolean; readonly stand: number;
   setOpen(open: boolean, stand?: number): void;
@@ -65,22 +65,30 @@ const CSS = `
 /* the board: coconut-wood planks, a gold rim */
 .kr-shop .board { position: relative; border-radius: ${u(12)}; overflow: hidden; border: ${u(3)} solid ${UI.yellow};
   background: repeating-linear-gradient(90deg, rgba(0,0,0,0.22) 0 ${u(2)}, transparent ${u(2)} ${u(140)}), linear-gradient(180deg, #4b2c15, #331d0d 60%, #2a170a); }
-.kr-shop .head { display: flex; align-items: center; gap: ${u(20)}; padding: ${u(48)} ${u(34)} ${u(18)}; }
-.kr-shop .badge { width: ${u(104)}; height: ${u(104)}; flex: none; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #fff1c9, #f2c879);
+.kr-shop .head { display: flex; align-items: center; gap: ${u(20)}; padding: ${u(38)} ${u(34)} ${u(12)}; }
+.kr-shop .badge { width: ${u(88)}; height: ${u(88)}; flex: none; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #fff1c9, #f2c879);
   box-shadow: 0 0 0 ${u(4)} ${UI.yellow}, 0 0 0 ${u(8)} rgba(20,10,0,0.55), 0 ${u(8)} ${u(16)} rgba(0,0,0,0.45); display: grid; place-items: center; overflow: hidden; }
 .kr-shop .badge svg { width: 92%; height: 92%; transform: translateY(6%); }
-.kr-shop .ttl { font: 900 ${u(64)} ${UI.cond}; letter-spacing: .04em; line-height: .95; color: ${UI.yellow};
+.kr-shop .ttl-row { display: flex; align-items: center; gap: ${u(14)}; }
+.kr-shop .ttl { font: 900 ${u(54)} ${UI.cond}; letter-spacing: .04em; line-height: .95; color: ${UI.yellow};
   text-shadow: 0 ${u(3)} 0 #8a4f00, 0 ${u(6)} ${u(10)} rgba(0,0,0,0.5); }
-.kr-shop .sub { font: 700 ${u(19)} ${UI.cond}; letter-spacing: .14em; color: rgba(251,243,201,0.78); margin-top: ${u(6)}; }
-.kr-shop .wallet { margin-left: auto; text-align: right; padding: ${u(10)} ${u(22)} ${u(12)}; border-radius: ${u(12)};
+.kr-shop .sale-pill { display: none; padding: ${u(5)} ${u(14)}; border-radius: 999px; background: linear-gradient(180deg, #ff6b2b, #d9261c);
+  border: ${u(2.5)} solid #ffd21f; color: #fff8e6; font: 900 ${u(21)} ${UI.cond}; letter-spacing: .08em;
+  box-shadow: 0 0 ${u(16)} rgba(255,107,43,0.65); white-space: nowrap; }
+.kr-shop.sale .sale-pill { display: inline-flex; align-items: center; }
+.kr-shop .head-talk { display: none; margin-left: ${u(12)}; padding: ${u(8)} ${u(14)}; border-radius: ${u(12)}; background: #fff3cf; color: #3a1e08;
+  font: 900 ${u(18)} ${UI.cond}; letter-spacing: .03em; line-height: 1.1; box-shadow: 0 ${u(4)} ${u(8)} rgba(0,0,0,0.35); max-width: ${u(280)}; }
+.kr-shop .head-talk.on { display: block; }
+.kr-shop .sub { font: 700 ${u(18)} ${UI.cond}; letter-spacing: .14em; color: rgba(251,243,201,0.78); margin-top: ${u(4)}; }
+.kr-shop .wallet { margin-left: auto; text-align: right; padding: ${u(8)} ${u(20)} ${u(10)}; border-radius: ${u(12)};
   background: linear-gradient(180deg, rgba(14,8,2,0.75), rgba(24,14,4,0.9)); box-shadow: inset 0 0 0 ${u(2)} rgba(255,212,0,0.55), 0 ${u(4)} ${u(10)} rgba(0,0,0,0.35); }
-.kr-shop .wallet small { display: block; font: 800 ${u(16)} ${UI.cond}; letter-spacing: .18em; color: rgba(251,243,201,0.7); }
-.kr-shop .wallet .cash { display: flex; align-items: center; justify-content: flex-end; font: 900 ${u(48)} ${UI.cond}; color: ${UI.yellow}; letter-spacing: .02em; line-height: 1.05; }
-.kr-shop .wallet .kr-bb { width: ${u(40)}; height: ${u(40)}; margin-right: ${u(8)}; vertical-align: 0; filter: drop-shadow(0 ${u(2)} ${u(2)} rgba(0,0,0,0.5)); }
-.kr-shop .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: ${u(18)}; padding: ${u(8)} ${u(32)} ${u(18)}; }
+.kr-shop .wallet small { display: block; font: 800 ${u(15)} ${UI.cond}; letter-spacing: .18em; color: rgba(251,243,201,0.7); }
+.kr-shop .wallet .cash { display: flex; align-items: center; justify-content: flex-end; font: 900 ${u(44)} ${UI.cond}; color: ${UI.yellow}; letter-spacing: .02em; line-height: 1.05; }
+.kr-shop .wallet .kr-bb { width: ${u(36)}; height: ${u(36)}; margin-right: ${u(8)}; vertical-align: 0; filter: drop-shadow(0 ${u(2)} ${u(2)} rgba(0,0,0,0.5)); }
+.kr-shop .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: ${u(13)}; padding: ${u(6)} ${u(32)} ${u(14)}; }
 /* a card = the front of a fruit crate: planks, a dark frame, a stencilled number, a price tag */
-.kr-shop .card { position: relative; height: ${u(268)}; border-radius: ${u(8)}; padding: ${u(12)} ${u(14)} 0; cursor: pointer; text-align: center;
-  background: repeating-linear-gradient(180deg, transparent 0 ${u(64)}, rgba(45,22,6,0.5) ${u(64)} ${u(67)}), linear-gradient(180deg, #a06a36, #7c4c23);
+.kr-shop .card { position: relative; height: ${u(214)}; border-radius: ${u(8)}; padding: ${u(10)} ${u(12)} 0; cursor: pointer; text-align: center;
+  background: repeating-linear-gradient(180deg, transparent 0 ${u(54)}, rgba(45,22,6,0.5) ${u(54)} ${u(57)}), linear-gradient(180deg, #a06a36, #7c4c23);
   box-shadow: inset 0 0 0 ${u(4)} #5b3415, inset 0 0 0 ${u(6)} rgba(255,220,160,0.18), 0 ${u(6)} ${u(12)} rgba(0,0,0,0.35);
   transition: transform .09s ease-out, box-shadow .12s; }
 html:not(.kr-pad) .kr-shop .card:hover, .kr-shop .card.sel { transform: translateY(${u(-4)}); box-shadow: inset 0 0 0 ${u(4)} ${UI.yellow}, inset 0 0 0 ${u(7)} rgba(255,240,170,0.35), 0 0 ${u(22)} rgba(255,212,0,0.55), 0 ${u(12)} ${u(20)} rgba(0,0,0,0.45); }
@@ -89,35 +97,37 @@ html:not(.kr-pad) .kr-shop .card:hover, .kr-shop .card.sel { transform: translat
 .kr-shop .card.deny { animation: krShopDeny .26s ease-out; }
 @keyframes krShopFlash { 0% { box-shadow: inset 0 0 0 ${u(6)} #fff, 0 0 ${u(44)} ${UI.yellow}; transform: translateY(${u(-4)}) scale(1.03); } 100% { transform: translateY(${u(-4)}); } }
 @keyframes krShopDeny { 0%, 100% { transform: translateY(${u(-4)}); } 25% { transform: translateY(${u(-4)}) translateX(${u(-7)}); } 65% { transform: translateY(${u(-4)}) translateX(${u(6)}); } }
-.kr-shop .card .k { position: absolute; left: ${u(12)}; top: ${u(10)}; min-width: ${u(32)}; height: ${u(32)}; padding: 0 ${u(6)}; border-radius: ${u(7)}; display: grid; place-items: center;
-  font: 900 ${u(20)} ${UI.cond}; color: #2a1606; background: rgba(255,236,190,0.85); box-shadow: 0 ${u(2)} 0 rgba(60,30,8,0.6); }
+.kr-shop .card .k { position: absolute; left: ${u(10)}; top: ${u(8)}; min-width: ${u(28)}; height: ${u(28)}; padding: 0 ${u(6)}; border-radius: ${u(7)}; display: grid; place-items: center;
+  font: 900 ${u(18)} ${UI.cond}; color: #2a1606; background: rgba(255,236,190,0.85); box-shadow: 0 ${u(2)} 0 rgba(60,30,8,0.6); }
 html.kr-pad .kr-shop .card .k { opacity: 0; transform: scale(.85); transition: opacity .1s, transform .1s; padding: 0 ${u(9)}; }
 html.kr-pad .kr-shop .card.sel .k { opacity: 1; transform: none; background: ${UI.yellow}; color: #2a1606; box-shadow: 0 ${u(2)} 0 #8a4f00, 0 0 ${u(12)} rgba(255,212,0,0.5); }
 html.kr-pad .kr-shop .card.sel.off .k, html.kr-pad .kr-shop .card.sel.poor .k { background: rgba(255,236,190,0.45); box-shadow: 0 ${u(2)} 0 rgba(60,30,8,0.4); }
-.kr-shop .card .ic { height: ${u(100)}; display: grid; place-items: center; margin-top: ${u(2)}; background: radial-gradient(closest-side, rgba(255,236,180,0.55), rgba(255,236,180,0) 85%); }
-.kr-shop .card .ic img { width: ${u(98)}; height: ${u(98)}; object-fit: contain; filter: drop-shadow(0 ${u(5)} ${u(4)} rgba(30,12,0,0.55)); }
-.kr-shop .card .ic svg { width: ${u(66)}; height: ${u(66)}; color: #fff1c4; filter: drop-shadow(0 ${u(3)} ${u(2)} rgba(30,12,0,0.6)); }
-.kr-shop .card .nm { font: 900 ${u(25)} ${UI.cond}; letter-spacing: .03em; margin-top: ${u(4)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff6d8; text-shadow: 0 ${u(2)} ${u(2)} rgba(40,16,0,0.75); }
-.kr-shop .card .ds { font: 600 ${u(15)} ${UI.sans}; line-height: 1.25; height: ${u(40)}; margin-top: ${u(2)}; color: rgba(255,244,214,0.9); text-shadow: 0 ${u(1)} ${u(2)} rgba(40,16,0,0.7); }
+.kr-shop .card .ic { height: ${u(74)}; display: grid; place-items: center; margin-top: 0; background: radial-gradient(closest-side, rgba(255,236,180,0.55), rgba(255,236,180,0) 85%); }
+.kr-shop .card .ic img { width: ${u(72)}; height: ${u(72)}; object-fit: contain; filter: drop-shadow(0 ${u(4)} ${u(3)} rgba(30,12,0,0.55)); }
+.kr-shop .card .ic svg { width: ${u(52)}; height: ${u(52)}; color: #fff1c4; filter: drop-shadow(0 ${u(3)} ${u(2)} rgba(30,12,0,0.6)); }
+.kr-shop .card .nm { font: 900 ${u(23)} ${UI.cond}; letter-spacing: .03em; margin-top: ${u(2)}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff6d8; text-shadow: 0 ${u(2)} ${u(2)} rgba(40,16,0,0.75); }
+.kr-shop .card .ds { font: 600 ${u(14)} ${UI.sans}; line-height: 1.22; height: ${u(34)}; margin-top: ${u(2)}; color: rgba(255,244,214,0.9); text-shadow: 0 ${u(1)} ${u(2)} rgba(40,16,0,0.7); }
 .kr-shop .card .ds .kr-bb { width: 1em; height: 1em; }
 .kr-shop .card.off .ds { color: #ffcf9a; }
 /* the price tag, hung on the crate by its corner */
-.kr-shop .card .tag { position: absolute; left: 50%; bottom: ${u(14)}; transform: translateX(-50%) rotate(-2deg); display: flex; align-items: center; gap: ${u(4)};
-  padding: ${u(5)} ${u(18)} ${u(5)} ${u(26)}; font: 900 ${u(31)} ${UI.cond}; letter-spacing: .02em; color: #2a1606; background: #ffd21f; white-space: nowrap;
+.kr-shop .card .tag { position: absolute; left: 50%; bottom: ${u(10)}; transform: translateX(-50%) rotate(-2deg); display: flex; align-items: center; gap: ${u(4)};
+  padding: ${u(4)} ${u(16)} ${u(4)} ${u(24)}; font: 900 ${u(27)} ${UI.cond}; letter-spacing: .02em; color: #2a1606; background: #ffd21f; white-space: nowrap;
   clip-path: polygon(${u(14)} 0, 100% 0, 100% 100%, ${u(14)} 100%, 0 50%); box-shadow: inset 0 ${u(-3)} 0 rgba(140,80,0,0.35); }
-.kr-shop .card .tag::before { content: ""; position: absolute; left: ${u(12)}; top: 50%; width: ${u(7)}; height: ${u(7)}; margin-top: ${u(-3.5)}; border-radius: 50%; background: #7c4c23; }
-.kr-shop .card .tag .kr-bb { width: ${u(28)}; height: ${u(28)}; vertical-align: 0; }
+.kr-shop .card.sale .tag { background: #64e879; color: #09240f; }
+.kr-shop .card .tag s { opacity: .6; font-size: .78em; margin-right: ${u(4)}; text-decoration-thickness: ${u(2.5)}; }
+.kr-shop .card .tag::before { content: ""; position: absolute; left: ${u(10)}; top: 50%; width: ${u(6)}; height: ${u(6)}; margin-top: ${u(-3)}; border-radius: 50%; background: #7c4c23; }
+.kr-shop .card .tag .kr-bb { width: ${u(24)}; height: ${u(24)}; vertical-align: 0; }
 /* "NEED x" stays readable: ≥ 11 px caps at 900p */
-.kr-shop .card .tag small { font: 800 ${u(20)} ${UI.cond}; letter-spacing: .03em; margin-left: ${u(7)}; }
+.kr-shop .card .tag small { font: 800 ${u(18)} ${UI.cond}; letter-spacing: .03em; margin-left: ${u(6)}; }
 .kr-shop .card.poor .tag { background: #ff6a52; color: #fff4ea; }
-.kr-shop .card.off .tag { background: #c9b98f; }
+.kr-shop .card.off .tag { background: #c9b98f; color: #2a1606; }
 /* the shopkeeper's line, in the free slot */
-.kr-shop .talk { position: relative; height: ${u(268)}; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: ${u(10)}; }
-.kr-shop .talk .bubble { position: relative; margin-bottom: ${u(16)}; padding: ${u(12)} ${u(16)}; border-radius: ${u(14)}; background: #fff3cf; color: #3a1e08;
-  font: 900 ${u(22)} ${UI.cond}; letter-spacing: .03em; line-height: 1.1; text-align: center; box-shadow: 0 ${u(5)} ${u(10)} rgba(0,0,0,0.35); }
-.kr-shop .talk .bubble::after { content: ""; position: absolute; left: 50%; bottom: ${u(-12)}; margin-left: ${u(-10)}; border: ${u(10)} solid transparent; border-top: ${u(12)} solid #fff3cf; border-bottom: 0; }
+.kr-shop .talk { position: relative; height: ${u(214)}; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: ${u(8)}; }
+.kr-shop .talk .bubble { position: relative; margin-bottom: ${u(12)}; padding: ${u(10)} ${u(16)}; border-radius: ${u(14)}; background: #fff3cf; color: #3a1e08;
+  font: 900 ${u(21)} ${UI.cond}; letter-spacing: .03em; line-height: 1.1; text-align: center; box-shadow: 0 ${u(5)} ${u(10)} rgba(0,0,0,0.35); }
+.kr-shop .talk .bubble::after { content: ""; position: absolute; left: 50%; bottom: ${u(-11)}; margin-left: ${u(-9)}; border: ${u(9)} solid transparent; border-top: ${u(11)} solid #fff3cf; border-bottom: 0; }
 .kr-shop .talk .bubble .kr-bb { width: 1em; height: 1em; }
-.kr-shop .talk .face { width: ${u(118)}; height: ${u(118)}; animation: krMonkeyBob 2.4s ease-in-out infinite; transform-origin: 50% 90%; }
+.kr-shop .talk .face { width: ${u(98)}; height: ${u(98)}; animation: krMonkeyBob 2.4s ease-in-out infinite; transform-origin: 50% 90%; }
 .kr-shop .talk .face.wave { animation: krMonkeyHop .6s ease-out 2; }
 @keyframes krMonkeyBob { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg) translateY(${u(-2)}); } }
 @keyframes krMonkeyHop { 0%, 100% { transform: none; } 40% { transform: translateY(${u(-14)}) rotate(-6deg); } }
@@ -133,19 +143,19 @@ html.kr-pad .kr-shop .card.sel.off .k, html.kr-pad .kr-shop .card.sel.poor .k { 
 `;
 let styled = false;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]!));
-const GLYPH: Record<string, "person" | "skull" | "bullet"> = { buyback: "person", bounty: "skull", ammo: "bullet" };
-/** what the shopkeeper says: welcome / short of Bucks / thanks (after a purchase) */
-const LINES = { hi: "WHAT'LL IT BE, KONG?", broke: "NO BUCKS, NO BANANAS! LOOT SOME CASH.", thanks: "PLEASURE DOING BUSINESS!" };
+const GLYPH: Record<string, "person" | "skull" | "bullet" | "upgrade" | "radar"> = { buyback: "person", bounty: "skull", ammo: "bullet", upgrade: "upgrade", radar: "radar" };
+/** what the shopkeeper says: welcome / short of Bucks / thanks / fire sale */
+const LINES = { hi: "WHAT'LL IT BE, KONG?", sale: "FIRE SALE! 50% OFF EVERYTHING!", broke: "NO BUCKS, NO BANANAS! LOOT SOME CASH.", thanks: "PLEASURE DOING BUSINESS!" };
 
 export function createShop(): ShopScreen {
   if (!styled) { injectStyles(); injectBucksCss(); const st = document.createElement("style"); st.textContent = CSS; document.head.appendChild(st); styled = true; }
   const el = document.createElement("div"); el.className = "kr-shop"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Banana Stand");
   el.innerHTML = `<div class="panel"><div class="awning"></div><div class="board">
-    <div class="head"><div class="badge">${MONKEY_SVG}</div><div><div class="ttl">BANANA STAND</div><div class="sub"></div></div>
+    <div class="head"><div class="badge">${MONKEY_SVG}</div><div><div class="ttl-row"><div class="ttl">BANANA STAND</div><div class="sale-pill"></div></div><div class="sub"></div></div><div class="head-talk"></div>
       <div class="wallet"><small>BANANA BUCKS</small><span class="cash">${bucksHtml(0)}</span></div></div>
     <div class="grid"></div>
     <div class="foot"><span class="buy-hint"></span><span class="sp"></span><span class="warn">TAKING DAMAGE CLOSES THE STAND</span><span class="leave"></span></div></div></div>`;
-  const grid = el.querySelector<HTMLElement>(".grid")!, cashEl = el.querySelector<HTMLElement>(".cash")!, subEl = el.querySelector<HTMLElement>(".sub")!, buyHintEl = el.querySelector<HTMLElement>(".buy-hint")!, leaveEl = el.querySelector<HTMLElement>(".leave")!;
+  const grid = el.querySelector<HTMLElement>(".grid")!, cashEl = el.querySelector<HTMLElement>(".cash")!, subEl = el.querySelector<HTMLElement>(".sub")!, salePillEl = el.querySelector<HTMLElement>(".sale-pill")!, headTalkEl = el.querySelector<HTMLElement>(".head-talk")!, badgeEl = el.querySelector<HTMLElement>(".badge")!, buyHintEl = el.querySelector<HTMLElement>(".buy-hint")!, leaveEl = el.querySelector<HTMLElement>(".leave")!;
   let cards: Array<{ el: HTMLElement; k: HTMLElement; nm: HTMLElement; ds: HTMLElement; tag: HTMLElement; id: number; ok: boolean; icon: string }> = [];
   let talk: { bubble: HTMLElement; face: HTMLElement } | null = null;
   let open = false, stand = -1, sel = 0, fresh = false, lastSig = "", view: ShopView | null = null, thanksUntil = 0, denyUntil = 0, denyLine = "";
@@ -154,9 +164,10 @@ export function createShop(): ShopScreen {
     const now = performance.now();
     const avail = view.offers.filter((o) => !o.why).map((o) => o.price);
     const cheapest = avail.length ? Math.min(...avail) : Infinity;
-    const line = now < thanksUntil ? LINES.thanks : now < denyUntil && denyLine ? denyLine : view.cash < cheapest ? LINES.broke : LINES.hi;
+    const line = now < thanksUntil ? LINES.thanks : now < denyUntil && denyLine ? denyLine : view.cash < cheapest ? LINES.broke : (view.saleLeft ?? 0) > 0 ? LINES.sale : LINES.hi;
     if (talk.bubble.dataset.line !== line) { talk.bubble.dataset.line = line; talk.bubble.textContent = line; }
   };
+  const keyLabel = (i: number) => (i === 9 ? "0" : i === 10 ? "-" : i === 11 ? "=" : String(i + 1));
   const paintHints = () => {
     if (device.pad) {
       const f = glyphFamily(), a = glyph(PB.A, f), st = stickGlyph("left", f), lb = glyph(PB.LB, f), rb = glyph(PB.RB, f);
@@ -165,9 +176,9 @@ export function createShop(): ShopScreen {
       leaveEl.innerHTML = `${inter && inter !== b ? `<kbd>${esc(inter)}</kbd>` : ""}<kbd>${esc(b)}</kbd>LEAVE`;
       cards.forEach((c) => { c.k.textContent = a; });
     } else {
-      buyHintEl.innerHTML = `<kbd>1</kbd>–<kbd>${cards.length || 7}</kbd> OR CLICK TO BUY`;
+      buyHintEl.innerHTML = cards.length >= 12 ? `<kbd>1</kbd>–<kbd>=</kbd> OR CLICK TO BUY` : cards.length >= 10 ? `<kbd>1</kbd>–<kbd>0</kbd> OR CLICK TO BUY` : `<kbd>1</kbd>–<kbd>${cards.length || 7}</kbd> OR CLICK TO BUY`;
       leaveEl.innerHTML = `<kbd>${esc(bindingText("use", 0).toUpperCase() || "E")}</kbd><kbd>ESC</kbd>LEAVE`;
-      cards.forEach((c, i) => { c.k.textContent = String(i + 1); });
+      cards.forEach((c, i) => { c.k.textContent = keyLabel(i); });
     }
   };
   const buy = (i: number) => {
@@ -211,11 +222,15 @@ export function createShop(): ShopScreen {
       grid.appendChild(card);
       cards.push({ el: card, k: card.querySelector(".k")!, nm: card.querySelector(".nm")!, ds: card.querySelector(".ds")!, tag: card.querySelector(".tag")!, id: o.id, ok: o.ok, icon: o.icon });
     });
-    // the free slot(s) of the last row: the shopkeeper
+    // the free slot(s) of the last row: the shopkeeper; if full 4×3 grid, show his bubble cleanly in the header
     if (v.offers.length % 4) {
+      headTalkEl.classList.remove("on");
       const t = document.createElement("div"); t.className = "talk"; t.style.gridColumn = `span ${4 - (v.offers.length % 4)}`;
       t.innerHTML = `<div class="bubble"></div><div class="face">${MONKEY_SVG}</div>`;
       grid.appendChild(t); talk = { bubble: t.querySelector(".bubble")!, face: t.querySelector(".face")! };
+    } else {
+      headTalkEl.classList.add("on");
+      talk = { bubble: headTalkEl, face: badgeEl };
     }
     paintHints();
     select(sel);
@@ -253,15 +268,19 @@ export function createShop(): ShopScreen {
         select(idx >= 0 ? idx : 0);
       }
       say();
-      const sig = `${v.cash}|${v.sub}|` + v.offers.map((o) => `${o.name}${o.price}${o.ok ? 1 : 0}${o.why ?? ""}`).join("|");
+      const saleS = Math.ceil(v.saleLeft ?? 0);
+      const sig = `${v.cash}|${v.sub}|${saleS}|` + v.offers.map((o) => `${o.name}${o.price}${o.origPrice ?? ""}${o.ok ? 1 : 0}${o.why ?? ""}`).join("|");
       if (sig === lastSig) return; lastSig = sig;
+      el.classList.toggle("sale", saleS > 0);
+      if (saleS > 0) salePillEl.textContent = `FIRE SALE · 50% OFF · ${saleS}S`;
       cashEl.innerHTML = bucksHtml(v.cash); subEl.textContent = v.sub;
       v.offers.forEach((o, i) => {
         const c = cards[i]; c.ok = o.ok;
         const poor = !o.ok && !o.why;
+        const onSale = !!o.origPrice && o.origPrice > o.price;
         c.nm.textContent = o.name; c.ds.innerHTML = moneyHtml(o.why ?? o.desc);
-        c.tag.innerHTML = `${coinHtml()}${o.price.toLocaleString("en-US")}${poor ? `<small>NEED ${(o.price - v.cash).toLocaleString("en-US")}</small>` : ""}`;
-        c.el.classList.toggle("off", !o.ok && !!o.why); c.el.classList.toggle("poor", poor);
+        c.tag.innerHTML = `${coinHtml()}${onSale ? `<s>${o.origPrice!.toLocaleString("en-US")}</s>` : ""}${o.price.toLocaleString("en-US")}${poor ? `<small>NEED ${(o.price - v.cash).toLocaleString("en-US")}</small>` : ""}`;
+        c.el.classList.toggle("off", !o.ok && !!o.why); c.el.classList.toggle("poor", poor); c.el.classList.toggle("sale", onSale && !poor && !o.why);
       });
     },
     onBuy: () => {},

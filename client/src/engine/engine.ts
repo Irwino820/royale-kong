@@ -529,7 +529,7 @@ export class Engine implements WorldCtx {
       sm.autoUpdate = au; sm.needsUpdate = nu;
       this.scene.remove(g);
       for (const d of batchDisposables) d.dispose();
-      g.traverse((o) => { (o as THREE.InstancedMesh).dispose?.(); (o as THREE.SkinnedMesh).skeleton?.dispose(); });
+      g.traverse((o) => { (o as THREE.SkinnedMesh).skeleton?.dispose(); });
       for (const m of mats) m.dispose();
       geo.dispose(); sgeo.dispose(); tex.dispose();
     }

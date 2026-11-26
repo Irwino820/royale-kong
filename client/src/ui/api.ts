@@ -72,7 +72,7 @@ export interface HudState {
   /** consumable use progress */
   using: { t: number; total: number; label: string } | null;
   killfeed: Array<{
-    at: number; killer: string; victim: string; weapon: WeaponId | "storm" | "fall" | "unknown" | "banana-bomb"; meKiller: boolean; meVictim: boolean;
+    at: number; killer: string; victim: string; weapon: WeaponId | "storm" | "fall" | "unknown" | "banana-bomb" | "airstrike"; meKiller: boolean; meVictim: boolean;
     /** optional: headshot kill — adds a headshot glyph */
     head?: boolean;
     /** optional: knock (resurgence, not final) vs final elimination — final kills get a skull */
@@ -96,6 +96,14 @@ export interface HudState {
   soundCues?: SoundCue[];
   /** optional: active mid-match supply drops for minimap / bigmap */
   supplyDrops?: Array<{ x: number; z: number; landed: boolean }>;
+  /** optional: active Radar Pulse (UAV) revealing nearby enemies on minimap & bigmap */
+  uav?: { left: number; radius: number; enemies: Array<{ x: number; z: number }> } | null;
+  /** optional: this match's Hot Drop POI (boosted loot + 2x cash + kill bonus) */
+  hotDrop?: { id: PoiId; name: string; x: number; z: number; r: number } | null;
+  /** optional: seconds left in mid-match Banana Stand Fire Sale (50% off) */
+  fireSaleLeft?: number;
+  /** optional: active Banana Airstrike danger corridors for minimap & bigmap */
+  airstrikes?: Array<{ x: number; z: number; yaw: number; left: number }>;
   /** floating damage numbers projected to screen (0..1 fractions) — re-projected every frame while alive */
   damageNumbers: Array<{
     at: number; sx: number; sy: number; amount: number; kind: "body" | "head" | "shield" | "break" | "kill";
@@ -121,8 +129,8 @@ export interface HudState {
   /** optional (economy): the wallet, the Banana Stands, my squad's bounty contract (the circle the target is
    *  in, seconds left, who) and the bounty ON my squad (seconds left, 0 = none) */
   econ?: { cash: number; stands: Array<{ x: number; z: number }>; bounty: { x: number; z: number; r: number; left: number; name: string } | null; hunted: number; gain?: { at: number; amount: number } } | null;
-  /** optional: banana bombs carried + the throw key — the lethal chip by the hotbar (null = none) */
-  lethal?: { count: number; key: string; cooking: boolean; /** the key-hint strip: 1 = a bomb in
+  /** optional: grenades carried + the throw key — the lethal chip by the hotbar (null = none) */
+  lethal?: { count: number; key: string; cooking: boolean; id?: "banana-bomb" | "smoke-bomb"; /** the key-hint strip: 1 = a bomb in
    *  hand (HOLD to cook, RELEASE to throw), 2 = just picked bombs up (HOLD G to cook & throw), 0 / absent = none */ hint?: number } | null;
   /** optional: the last thing you picked up ("PICKED UP · X" for a moment); a new `at` per pickup */
   pickup?: { at: number; label: string } | null;
@@ -299,6 +307,14 @@ export interface LobbyActions {
   leave(): void;
   /** optional (admin lobby): pick a TRIOS team in an event lobby (0-based; −1 = no team, auto-placed at START) */
   pickTeam?(team: number): void;
+  /** optional (Wardrobe): preview outfit live on the title kong */
+  setOutfit?(o: import("../actors/api").KongOutfit | null): void;
+  /** optional (Wardrobe): spin the live 3D title kong by deltaRad */
+  spinHero?(deltaRad: number): void;
+  /** optional (Wardrobe): ease the 3D title kong back to front-facing */
+  resetHeroSpin?(): void;
+  /** optional (Wardrobe): trigger celebration emote on the title kong */
+  emoteHero?(): void;
 }
 export interface LobbyScreen {
   el: HTMLElement;

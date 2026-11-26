@@ -78,6 +78,8 @@ const SLOT_SHORT: Record<string, [string, string, string | null]> = {
   smg: ["SMG", "var(--kong-sky)", "smg"],
   sniper: ["SNIPER", "var(--kong-rarity-rare)", "sniper"],
   rocket: ["ROCKET", "var(--kong-danger)", "rocket"],
+  bow: ["BOW", "var(--kong-success)", "bow"],
+  minigun: ["SHRED", "var(--kong-warning)", "minigun"],
   consumable: ["HEAL", "var(--kong-success)", "banana"],
 };
 

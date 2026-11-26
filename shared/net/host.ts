@@ -90,6 +90,10 @@ export function matchInfo(m: Match, seed: number, pids: Record<number, number>) 
     covers: m.covers.list.filter((w) => w.live && !w.perm).map((w) => [w.id, w.owner, w.x, w.y, w.z, w.yaw, w.hp]),
     // active mid-match supply drops (for late joiners / reconnects)
     supplyDrops: m.chests.filter((c) => c.supply).map((c) => [c.id, c.x, c.y, c.z, c.targetY ?? c.y, c.yaw, c.opened ? 1 : 0]),
+    // active smoke clouds (for late joiners / reconnects)
+    smokes: m.smokes.map((s) => [s.id, +s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2), +s.left.toFixed(2)]),
+    // active banana airstrikes (for late joiners / reconnects)
+    airstrikes: m.airstrikes.map((a) => [a.id, a.owner, +a.x.toFixed(2), +a.y.toFixed(2), +a.z.toFixed(2), +a.yaw.toFixed(4), +a.t.toFixed(2)]),
   };
 }
 
