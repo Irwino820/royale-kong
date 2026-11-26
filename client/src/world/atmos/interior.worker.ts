@@ -1,19 +1,24 @@
-// atmos interior volume worker (so interiors are not flat-lit): rasterises the POIs' static collision
-// boxes (packed on the main thread and transferred once as a Float32Array so this worker stays ~2 KB instead of
-// bundling a duplicate 900 KB copy of shared/pois) into a camera-centred occupancy grid. Each voxel stores its
-// COVERAGE (2x2x2 supersamples → 0..255), so a 30 cm wall in a 50 cm voxel is a soft partial blocker and the GPU's
-// trilinear filter keeps openings open.
+// atmos interior volume worker (so interiors are not flat-lit and rain stays outside roofs): rasterises the POIs'
+// static collision boxes (packed on the main thread and transferred once as a Float32Array so this worker stays ~2 KB
+// instead of bundling a duplicate 900 KB copy of shared/pois) into:
+//  1) a camera-centred 3D occupancy grid (2x2x2 supersamples → 0..255) for interior sky visibility / GI (when wantVol)
+//  2) a camera-centred 2D top-of-roof heightmap (R32F, 256x256 @ 0.5 m = 128x128 m) for rain streak & puddle occlusion
+import { BOX_STRIDE, rasterRoof } from "./roof-grid";
 
 interface InitMsg { kind: "init"; buf: Float32Array; n: number }
-interface Req { kind?: "build"; id: number; ox: number; oy: number; oz: number; nx: number; ny: number; nz: number; vs: number }
+interface Req {
+  kind?: "build"; id: number;
+  ox: number; oy: number; oz: number; nx: number; ny: number; nz: number; vs: number;
+  rox: number; roz: number; rn: number; rvs: number;
+  wantVol: boolean;
+}
 
-// per box: centre (3), half extents (3), yaw cos / sin, pitch cos / sin, world AABB min (3) / max (3)
-const S = 16;
+const S = BOX_STRIDE;
 let B: Float32Array | null = null;
 let N = 0;
 let queued: Req | null = null;
 
-function build(r: Req): Uint8Array {
+function buildVol(r: Req): Uint8Array {
   const { ox, oy, oz, nx, ny, nz, vs } = r;
   const acc = new Uint8Array(nx * ny * nz);
   const X1 = ox + nx * vs, Y1 = oy + ny * vs, Z1 = oz + nz * vs;
@@ -46,8 +51,11 @@ function build(r: Req): Uint8Array {
 
 function run(req: Req) {
   const t0 = performance.now();
-  const data = build(req);
-  (self as unknown as Worker).postMessage({ id: req.id, data, ms: performance.now() - t0, boxes: N }, [data.buffer]);
+  const data = req.wantVol ? buildVol(req) : null;
+  const roof = rasterRoof(B!, N, req.rox, req.roz, req.rn, req.rvs);
+  const transfer: Transferable[] = [roof.buffer];
+  if (data) transfer.push(data.buffer);
+  (self as unknown as Worker).postMessage({ id: req.id, data, roof, ms: performance.now() - t0, boxes: N }, transfer);
 }
 
 self.onmessage = (ev: MessageEvent<InitMsg | Req>) => {
