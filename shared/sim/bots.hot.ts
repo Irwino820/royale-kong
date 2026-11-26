@@ -113,6 +113,23 @@ export function botThink(m: Match, p: Player, b: BotBrain, inp: Input) {
     if (m.world.ground(x, z) > 1) { b.state = S.Hunt; b.tx = x; b.tz = z; b.roamT = 12; }
   }
 
+  // trios: respond to human squadmate tactical pings (enemy/danger -> push; move/loot/vehicle -> rally)
+  if (m.mode === "trios" && m.teamPings.size > 0 && hasWeapon && m.phase === 2 && ((m.tick + p.id) % 12) === 0 && (b.state === S.Loot || b.state === S.Roam || b.state === S.Hunt)) {
+    const tp = m.teamPings.get(p.team);
+    if (tp && m.time - tp.at < 26) {
+      const pd = dmath.hypot(tp.x - p.x, tp.z - p.z);
+      const urgent = tp.kind === "enemy" || tp.kind === "danger";
+      if ((urgent && pd < 300 && pd > 12) || (!urgent && b.state !== S.Hunt && pd < 260 && pd > 18)) {
+        const spread = urgent ? 6 : 11;
+        const ang = (p.id * 2.39996) % (Math.PI * 2);
+        b.state = S.Hunt;
+        b.tx = tp.x + dmath.cos(ang) * spread;
+        b.tz = tp.z + dmath.sin(ang) * spread;
+        b.roamT = urgent ? 14 : 10;
+      }
+    }
+  }
+
   // trios: help a squadmate who is fighting nearby; never wander off alone
   if (m.mode === "trios" && (b.state === S.Loot || b.state === S.Roam) && ((m.tick + p.id) % 12) === 0) {
     let lead: Player | null = null, fightMate: Player | null = null;

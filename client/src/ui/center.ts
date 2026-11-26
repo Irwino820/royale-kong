@@ -73,9 +73,11 @@ export class CenterLayer {
 
     // ---- crosshair target gap
     const slot = s.hotbar[s.activeSlot];
-    // (behind a helicopter's door gun the hands are holstered: the minigun's own reticle, sized by its spread)
+    // (behind a helicopter's door gun the hands are holstered: the minigun's own reticle, sized by its spread;
+    //  during freefall / glide / dancing `handsVisible === false` keeps only the clean ping dot, never a shotgun ring)
     const gun = s.gun ?? null;
-    const wid = gun ? null : slot && slot.kind === "weapon" ? (slot.id as WeaponId) : null;
+    const hands = s.handsVisible !== false;
+    const wid = gun || !hands ? null : slot && slot.kind === "weapon" ? (slot.id as WeaponId) : null;
     let target = wid ? STATIC_GAP[wid] : 6;
     if (gun && s.spread !== undefined) {
       const fov = ((s.fov ?? 75) * Math.PI) / 180;
@@ -99,7 +101,7 @@ export class CenterLayer {
     const hasCues = !!cues && cues.length > 0;
     const animating = hitAge < Math.max(hitLife, ringLife) + 0.02 || now - this.skullStart < 1.1 || this.dirs.length > 0 || !!prog || hasCues;
     this.gunHeat = gun ? Math.round(gun.heat * 20) / 20 : -1; this.gunLock = !!gun && gun.lock; this.gunEmpty = !!gun && gun.belt <= 0;
-    this.atWheel = !!s.vehicle && s.vehicle.seat === 0;
+    this.atWheel = (!!s.vehicle && s.vehicle.seat === 0) || !!s.emote;
     const sig = `${s.scoped}|${!!s.ads}|${wid}|${this.gap.toFixed(2)}|${s.hp > 0}|${vh}|${this.gunHeat}|${this.gunLock}|${this.gunEmpty}|${this.atWheel}|${hasCues ? cues!.length : 0}`;
     if (!animating && this.idle && sig === this.lastSig) return;
     this.lastSig = sig;

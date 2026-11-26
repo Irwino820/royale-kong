@@ -775,10 +775,12 @@ function stepAir(p: Player, inp: Input, world: StaticWorld, dt: number, pressed:
       p.surf = world.G[0] > 0 ? world.G[4] : 255;
       if (hard) { p.vy = 0; fallDamage(p, 45); p.anim |= 4; }
       p.vy = 0; p.vx *= 0.3; p.vz *= 0.3; leaveAir(p); p.airT = 0; p.landedAt = 0;
-      break;
+      stepHands(p, inp, dt, pressed);
+      return;
     }
   }
-  stepHands(p, inp, dt, pressed);
+  // hands are busy skydiving / gripping the glider bar until touchdown: timers run, nothing fires, reloads, heals or throws
+  stepHandsBusy(p, inp, dt, pressed, B.RELOAD | B.THROW | B.USE);
 }
 
 /** weapon / consumable timers; sets p.fired = pellet count when a shot leaves the barrel this tick */

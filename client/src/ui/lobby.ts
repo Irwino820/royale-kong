@@ -8,7 +8,7 @@
 // join by code, invite links, the room with its roster and START / LEAVE), firing range, the controls guide, the
 // controls strip (Training tab), errors / busy, full screen, controller navigation (ui/padnav.ts).
 import type { BotDifficulty, LobbyActions, LobbyPlayer, LobbyScreen, LobbyState, Mode } from "./api";
-import { injectStyles } from "./styles";
+import { injectStyles, uiAsset } from "./styles";
 import { injectMenuStyles } from "./menu-styles";
 import { injectLobbyStyles } from "./lobby-styles";
 import { createControlsGuide } from "./onboarding";
@@ -24,6 +24,7 @@ import {
   CROWN_HAT_INDEX, HAT_OPTIONS, SHORTS_PALETTE, TOP_OPTIONS,
   hasVictoryCrown, loadPlayerOutfit, outfitFor, savePlayerOutfit, type PlayerOutfitPref,
 } from "../actors/outfit-pick";
+import { EMOTES } from "../actors/emotes";
 
 const NAME_KEY = "kr-callsign", MODE_KEY = "kr-mode", DIFF_KEY = "kr-bot-difficulty";
 const NAME_MAX = 14;
@@ -187,9 +188,32 @@ export function createLobby(actions: LobbyActions): LobbyScreen {
     shortBtns.push({ btn: b, color: opt.color, label: opt.label });
   }
 
+  const danceGroup = h("div", "tn-wd-group", wdGroups);
+  const danceHead = h("h2", "tn-wd-head", danceGroup); danceHead.textContent = "Dances";
+  const danceHint = h("small", "", danceHead); danceHint.textContent = "Hold H in match";
+  const danceRow = h("div", "tn-wd-row", danceGroup);
+  let activeDance = -1;
+  const danceBtns: HTMLButtonElement[] = [];
+  for (const em of EMOTES) {
+    const b = h("button", "tn-wd-chip", danceRow); b.type = "button";
+    b.style.display = "inline-flex"; b.style.alignItems = "center"; b.style.gap = "6px";
+    const img = document.createElement("img");
+    img.src = uiAsset(`icons/emote-${em.key}.webp`);
+    img.alt = ""; img.draggable = false;
+    img.style.cssText = "width:26px;height:26px;object-fit:contain;filter:drop-shadow(0 2px 0 rgba(0,0,0,.7))";
+    b.appendChild(img);
+    const sp = document.createElement("span"); sp.textContent = em.name; b.appendChild(sp);
+    b.addEventListener("click", () => {
+      if (activeDance === em.id) { activeDance = -1; actions.emoteHero?.(-1); }
+      else { activeDance = em.id; actions.emoteHero?.(em.id); }
+      danceBtns.forEach((btn, i) => btn.setAttribute("aria-pressed", String(i === activeDance)));
+    });
+    danceBtns.push(b);
+  }
+
   const wdActions = h("div", "tn-wd-actions", wdGroups);
   const btnRandLook = h("button", "tn-play-link tn-play-link--sm", wdActions); btnRandLook.type = "button"; btnRandLook.innerHTML = `${ICON.dice}<span>Randomize</span>`;
-  const btnEmote = h("button", "tn-play-link tn-play-link--sm", wdActions); btnEmote.type = "button"; btnEmote.innerHTML = `${ICON.sparkle}<span>Emote</span>`;
+  const btnEmote = h("button", "tn-play-link tn-play-link--sm", wdActions); btnEmote.type = "button"; btnEmote.innerHTML = `${ICON.sparkle}<span>Dance</span>`;
   const btnSpinL = h("button", "tn-play-link tn-play-link--sm", wdActions); btnSpinL.type = "button"; btnSpinL.setAttribute("aria-label", "Rotate Kong left"); btnSpinL.innerHTML = `${ICON.rotate}<span>Turn</span>`;
   btnRandLook.addEventListener("click", () => {
     const crownOk = hasVictoryCrown();
@@ -198,9 +222,15 @@ export function createLobby(actions: LobbyActions): LobbyScreen {
     const top = [-1, 0, 1, 2][Math.floor(Math.random() * 4)];
     const shorts = SHORTS_PALETTE[Math.floor(Math.random() * SHORTS_PALETTE.length)].color;
     setOutfitPref({ mode: "custom", hat, top, shorts });
-    actions.emoteHero?.();
+    activeDance = Math.floor(Math.random() * EMOTES.length);
+    danceBtns.forEach((btn, i) => btn.setAttribute("aria-pressed", String(i === activeDance)));
+    actions.emoteHero?.(activeDance);
   });
-  btnEmote.addEventListener("click", () => actions.emoteHero?.());
+  btnEmote.addEventListener("click", () => {
+    activeDance = (activeDance + 1) % EMOTES.length;
+    danceBtns.forEach((btn, i) => btn.setAttribute("aria-pressed", String(i === activeDance)));
+    actions.emoteHero?.(activeDance);
+  });
   btnSpinL.addEventListener("click", () => actions.spinHero?.(Math.PI / 2));
 
   // drag zone over the live 3D Kong (right half of the lobby) while on Wardrobe

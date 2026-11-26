@@ -38,7 +38,7 @@ export class Minimap {
     if (Math.abs(target - this.viewR) < 0.5) this.viewR = target;
     const planeOn = !!s.plane;
     const rot = preferences.value.minimapRotate;
-    const sig = `${rot ? "r" : "n"}|${this.map.version}|${s.me.x.toFixed(1)}|${s.me.z.toFixed(1)}|${s.yaw.toFixed(3)}|${this.viewR.toFixed(1)}|${s.safe.cx},${s.safe.cz},${s.safe.r.toFixed(1)}|${s.next ? `${s.next.cx},${s.next.cz},${s.next.r}` : ""}|${s.dropMarker ? `${s.dropMarker.x},${s.dropMarker.z}` : ""}|${s.squadMarks?.length ? s.squadMarks.map((q) => `${q.x},${q.z}`).join(";") : ""}|${planeOn ? Math.floor(now * 30) : 0}|${sqSig(s)}|${s.stormPhase}|${shotSig(s)}|${tukSig(s)}|${econSig(s, now)}`;
+    const sig = `${rot ? "r" : "n"}|${this.map.version}|${s.me.x.toFixed(1)}|${s.me.z.toFixed(1)}|${s.yaw.toFixed(3)}|${this.viewR.toFixed(1)}|${s.safe.cx},${s.safe.cz},${s.safe.r.toFixed(1)}|${s.next ? `${s.next.cx},${s.next.cz},${s.next.r}` : ""}|${s.dropMarker ? `${s.dropMarker.x},${s.dropMarker.z}` : ""}|${s.squadMarks?.length ? s.squadMarks.map((q) => `${q.x},${q.z}`).join(";") : ""}|${s.pings?.length ? s.pings.map((q) => `${q.kind}:${q.x.toFixed(0)},${q.z.toFixed(0)}`).join(";") + Math.floor(now * 6) : ""}|${planeOn ? Math.floor(now * 30) : 0}|${sqSig(s)}|${s.stormPhase}|${shotSig(s)}|${tukSig(s)}|${econSig(s, now)}`;
     if (sig === this.sig) return;
     this.sig = sig;
     this.draw(s, now);
@@ -164,9 +164,13 @@ export class Minimap {
     if (s.vehicles) for (const q of s.vehicles) { if (q.mine) { myTuk = q; continue; } const [x, y] = P(q.x, q.z); if (x > -12 && x < VIEW + 12 && y > -12 && y < VIEW + 12) { if (q.kind === 1) heliDot(g, x, y, 10, false, q.wreck); else tukDot(g, x, y, 10, false, q.wreck); } }
     // enemy gunfire
     if (s.shots) for (const q of s.shots) shotDot(g, ...P(q.x, q.z), q.a, 6);
-    // drop marker
+    // drop marker + tactical 3D pings
     if (s.squadMarks) for (const q of s.squadMarks) drawPin(g, ...P(q.x, q.z), 11, q.color);
     if (s.dropMarker) drawPin(g, ...P(s.dropMarker.x, s.dropMarker.z), 13);
+    if (s.pings) for (const q of s.pings) if (q.kind !== "move") {
+      const [px, py] = P(q.x, q.z);
+      if (px > -16 && px < VIEW + 16 && py > -16 && py < VIEW + 16) tacticalPingDot(g, px, py, q.kind === "enemy" || q.kind === "danger", q.color, 7.5, now);
+    }
     // (economy) Banana Stands + the bounty circle
     if (s.econ) {
       for (const q of s.econ.stands) { const [x, y] = P(q.x, q.z); if (x > -12 && x < VIEW + 12 && y > -12 && y < VIEW + 12) standDot(g, x, y, 8); }
@@ -430,6 +434,22 @@ export function mateMarker(g: CanvasRenderingContext2D, x: number, y: number, ya
   } else { g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); }
   g.fillStyle = col; g.fill();
   g.lineWidth = 2; g.strokeStyle = "rgba(10,14,20,0.85)"; g.stroke();
+  g.restore();
+}
+
+/** Tactical 3D ping marker on minimap / bigmap: pulsing red danger diamond or crisp colored diamond */
+export function tacticalPingDot(g: CanvasRenderingContext2D, x: number, y: number, danger: boolean, color: string, r: number, now: number) {
+  g.save();
+  g.translate(x, y);
+  if (danger) {
+    const p = (now * 1.8) % 1;
+    g.strokeStyle = color; g.globalAlpha = (1 - p) * 0.85; g.lineWidth = 2;
+    g.beginPath(); g.arc(0, 0, r * (0.8 + p * 1.9), 0, Math.PI * 2); g.stroke();
+    g.globalAlpha = 1;
+  }
+  g.rotate(Math.PI / 4);
+  g.fillStyle = color; g.strokeStyle = "#0b0f16"; g.lineWidth = Math.max(2, r * 0.28);
+  g.beginPath(); g.rect(-r * 0.72, -r * 0.72, r * 1.44, r * 1.44); g.fill(); g.stroke();
   g.restore();
 }
 

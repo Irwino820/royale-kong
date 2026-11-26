@@ -234,6 +234,46 @@ html.kr-calm .kr-vitals .row.glowing .glow { animation: none; opacity: .8; }
 .kr-mtag.redeploy .nm { color: var(--kong-warning); }
 .kr-mtag.air .pin { border-radius: 50%; }
 
+/* ---------- 3D tactical pings (projected world markers + toast + active dance badge) ---------- */
+.kr-ptags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.kr-ptag { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
+.kr-ptag .ico { position: absolute; left: ${T(-17)}; top: ${T(-34)}; width: ${T(34)}; height: ${T(34)};
+  border-radius: ${T(9)}; background: rgba(11,18,28,.92); border: ${T(3)} solid var(--c);
+  box-shadow: 0 ${T(4)} 0 var(--kong-outline), 0 0 ${T(14)} color-mix(in srgb, var(--c) 45%, transparent);
+  display: grid; place-items: center; color: var(--c); transform-origin: center bottom; }
+.kr-ptag .ico svg { width: ${T(20)}; height: ${T(20)}; }
+.kr-ptag .ico::after { content: ""; position: absolute; left: 50%; bottom: ${T(-9)}; transform: translateX(-50%);
+  border: ${T(5)} solid transparent; border-top: ${T(7)} solid var(--c); }
+.kr-ptag.danger .ico, .kr-ptag.enemy .ico { animation: kr-ping-pulse .85s ease-in-out infinite; }
+.kr-ptag.edge .ico::after { display: none; }
+.kr-ptag .arr { display: none; position: absolute; left: ${T(-8)}; top: ${T(-24)}; width: ${T(16)}; height: ${T(16)}; transform-origin: 50% 50%; }
+.kr-ptag.edge .arr { display: block; }
+.kr-ptag .arr::after { content: ""; position: absolute; left: ${T(24)}; top: ${T(2)}; border: ${T(6)} solid transparent; border-left: ${T(11)} solid var(--c);
+  filter: drop-shadow(${T(1.5)} 0 0 var(--kong-outline)) drop-shadow(${T(-1.5)} 0 0 var(--kong-outline)) drop-shadow(0 ${T(1.5)} 0 var(--kong-outline)) drop-shadow(0 ${T(-1.5)} 0 var(--kong-outline)); }
+.kr-ptag .lab { position: absolute; left: 50%; bottom: ${T(40)}; transform: translateX(-50%); white-space: nowrap; text-align: center;
+  ${nunito(13, 900, ".08em")} line-height: 1.15; color: var(--kong-text); text-transform: uppercase;
+  -webkit-text-stroke: ${T(3.5)} var(--kong-outline); paint-order: stroke fill; text-shadow: 0 ${T(2)} 0 var(--kong-outline); }
+.kr-ptag .lab .nm { display: block; color: var(--c); }
+.kr-ptag .lab .d { display: block; font-size: ${T(12)}; color: var(--kong-text); }
+@keyframes kr-ping-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+.kr-calm .kr-ptag .ico { animation: none; }
+
+.kr-ptoast { position: absolute; left: 50%; top: ${T(116)}; transform: translateX(-50%); pointer-events: none;
+  display: flex; align-items: center; gap: ${T(10)}; padding: ${T(7)} ${T(18)}; border-radius: 999px;
+  background: rgba(11,18,28,.9); border: var(--kong-outline-sm) solid var(--kong-outline);
+  box-shadow: var(--kong-drop-pill), inset ${T(6)} 0 0 var(--c, var(--kong-accent));
+  ${nunito(15, 900, ".1em")} text-transform: uppercase; color: var(--kong-text); white-space: nowrap; }
+.kr-ptoast b { color: var(--c, var(--kong-accent)); }
+.kr-ptoast small { color: var(--kong-text-muted); font-size: ${T(13)}; }
+
+.kr-emote-chip { position: absolute; left: 50%; bottom: ${T(142)}; transform: translateX(-50%); pointer-events: none;
+  display: flex; align-items: center; gap: ${T(12)}; padding: ${T(9)} ${T(20)}; border-radius: 999px;
+  background: rgba(11,18,28,.9); border: var(--kong-outline-sm) solid var(--kong-outline);
+  box-shadow: var(--kong-drop-pill);
+  ${nunito(14, 900, ".1em")} text-transform: uppercase; color: var(--kong-text); white-space: nowrap; }
+.kr-emote-chip .nm { ${lilita(22, 3.5)} color: var(--kong-accent); }
+.kr-emote-chip small { color: var(--kong-text-muted); font-size: ${T(12)}; }
+
 /* ---------- announcements: an outlined pill ribbon with a Lilita title ---------- */
 .kr-announce { position: absolute; left: 50%; top: ${T(196)}; transform: translateX(-50%); width: max-content; max-width: calc(100vw - ${T(120)});
   display: flex; flex-direction: column; align-items: center; text-align: center; pointer-events: none; }

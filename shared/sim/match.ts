@@ -190,6 +190,14 @@ export class Match {
   bombs: Array<BombBody & { id: number; owner: number; fuse: number; smoke?: boolean }> = []; nextBombId = 1;
   /** active tactical smoke clouds (block bot LOS; synced to clients via EV.Smoke / matchInfo) */
   readonly smokes: Array<{ id: number; x: number; y: number; z: number; r: number; left: number }> = [];
+  /** latest human tactical ping per team (trios AI squadmates rally/hunt toward it; never populated in bot-only sim) */
+  readonly teamPings = new Map<number, { x: number; z: number; kind: string; at: number }>();
+  setTeamPing(team: number, x: number | null, z = 0, kind = "move") {
+    if (x === null) { this.teamPings.delete(team); return; }
+    let entry = this.teamPings.get(team);
+    if (!entry) { entry = { x, z, kind, at: this.time }; this.teamPings.set(team, entry); }
+    else { entry.x = x; entry.z = z; entry.kind = kind; entry.at = this.time; }
+  }
   /** active Banana Airstrikes (6-bomb precision barrages stepped inside stepBombs) */
   readonly airstrikes: Array<{ id: number; owner: number; x: number; y: number; z: number; yaw: number; t: number; dropped: number }> = [];
   private nextAirstrikeId = 1;

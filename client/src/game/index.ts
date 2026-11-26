@@ -18,6 +18,8 @@ import { PLANE_ALT } from "../../../shared/sim/const";
 import { createWeaponsKit } from "../weapons/index";
 import type { Fx } from "../weapons/api";
 import { createAudio } from "../audio/index";
+import { EmoteMusic } from "../audio/emote-music";
+import { isDanceId } from "../actors/emotes";
 import { createKong, kongManager } from "../actors/kong";
 import type { KongActor, KongPose } from "../actors/api";
 import { createPlane } from "../actors/plane";
@@ -193,6 +195,8 @@ export async function startGame(engine: Engine, boot: GameBoot) {
   // gesture lasts ~5 s: asked again at match start, after the island prepared or the host pressed START, it was refused)
   const fsOnPlay = () => input.autoFullscreen();
   let titleRef: ReturnType<typeof createTitleScene> | null = null;
+  const lobbyMusic = new EmoteMusic(() => (audio as { ctx?: BaseAudioContext }).ctx ?? null);
+  let lobbyMusicUntil = 0;
   const actions: LobbyActions = {
     skipCoach() { coach.skip(); },
     replayCoach() { coach.replay(); coachObserver.reset(); },
@@ -209,7 +213,12 @@ export async function startGame(engine: Engine, boot: GameBoot) {
     setOutfit(o) { titleRef?.setOutfit(o); },
     spinHero(d) { titleRef?.spin(d); },
     resetHeroSpin() { titleRef?.resetSpin(); },
-    emoteHero() { titleRef?.triggerEmote(); audio.play("ui:click", { volume: 0.45 }); },
+    emoteHero(id) {
+      const picked = titleRef?.triggerEmote(id) ?? -1;
+      audio.play("ui:click", { volume: 0.45 });
+      if (isDanceId(picked)) { void audio.unlock(); lobbyMusic.start(picked, 0.85); lobbyMusicUntil = performance.now() + 9000; }
+      else { lobbyMusic.stop(); lobbyMusicUntil = 0; }
+    },
   };
   const lobby = eventCode !== null ? createEventLobby(actions, eventCode) : createLobby(actions);
   ui.appendChild(lobby.el);
@@ -834,13 +843,14 @@ export async function startGame(engine: Engine, boot: GameBoot) {
     blimp.update(dt, t);
     if (caster?.active) caster.update(dt, t);
     else if (inMatch && cm && render) {
+      if (lobbyMusicUntil > 0) { lobbyMusic.stop(); lobbyMusicUntil = 0; }
       // watching someone: the mouse is the cursor (a capture from the last life is let go once);
       // the player list closes when spectating ends
       const watching = spectating();
       if (watching && !wasWatching && input.locked) input.unlock();
       if (!watching && wasWatching) render.spec.listOpen = false;
       wasWatching = watching;
-      const allowFire = input.engaged && input.gameplayAllowed() && cm.pred.st !== PS.Plane;
+      const allowFire = input.engaged && input.gameplayAllowed() && cm.pred.st !== PS.Plane && cm.pred.st !== PS.Freefall && cm.pred.st !== PS.Glide;
       input.frame(dt);
       cm.update(dt, input, allowFire);
       render.update(dt, t);
@@ -872,6 +882,7 @@ export async function startGame(engine: Engine, boot: GameBoot) {
       // During Warmup (phase 0), keep warming any light POIs / late textures at 1 upload/frame before the plane takes off
       if (warmReady && cm.phase === 0) warmer.tick();
     } else {
+      if (lobbyMusicUntil > 0 && performance.now() > lobbyMusicUntil) { lobbyMusic.stop(); lobbyMusicUntil = 0; }
       coach.update({ active: false }); coachObserver.reset();
       title.update(dt, t);
       storm.update(dt, t, engine.camera);

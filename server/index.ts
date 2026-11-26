@@ -564,15 +564,34 @@ function onJSON(c: Client, msg: { t?: unknown; [k: string]: unknown }) {
     }
     // the client's island stream (the warm-up waits for it, ≤ 40 s: MatchHost.holdForStream)
     case "stream": c.peer.streamed = msg.done === true; break;
-    // my map marker / ping → my squadmates only (solo: nobody). ≤ 6 per second per player; coordinates
-    // checked against the island's bounds
+    // my map marker / tactical 3D ping → my squadmates only (solo: nobody). ≤ 16 per second per player; coordinates
+    // checked against the island's bounds; also tells trios bot teammates where to rally / hunt
     case "mark": {
       const l = c.lobby, m = l?.match; if (!l || !m || c.pid < 0) break;
       const now = Date.now(); if (now - c.markAt < 60) break; c.markAt = now;
-      const clear = msg.clear === true, x = Number(msg.x), z = Number(msg.z);
+      const clear = msg.clear === true, x = Number(msg.x), z = Number(msg.z), y = Number(msg.y);
       if (!clear && !(Number.isFinite(x) && Number.isFinite(z) && Math.abs(x) < 4000 && Math.abs(z) < 4000)) break;
-      const team = m.teamOf(c.pid), out = JSON.stringify(clear ? { t: "mark", pid: c.pid, clear: true } : { t: "mark", pid: c.pid, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
+      const KINDS = ["move", "enemy", "danger", "loot", "chest", "vehicle", "shop"];
+      const kind = typeof msg.kind === "string" && KINDS.includes(msg.kind) ? msg.kind : "move";
+      const label = typeof msg.label === "string" ? msg.label.replace(/[^A-Z0-9 .·\-]/gi, "").slice(0, 32) : "";
+      const color = typeof msg.color === "string" && /^#[0-9a-fA-F]{6}$/.test(msg.color) ? msg.color : "";
+      const team = m.teamOf(c.pid);
+      m.setTeamPing(team, clear ? null : x, z, kind);
+      const payload = clear
+        ? { t: "mark", pid: c.pid, clear: true, kind }
+        : { t: "mark", pid: c.pid, x: Math.round(x * 10) / 10, ...(Number.isFinite(y) && Math.abs(y) < 1000 ? { y: Math.round(y * 10) / 10 } : {}), z: Math.round(z * 10) / 10, kind, ...(label ? { label } : {}), ...(color ? { color } : {}) };
+      const out = JSON.stringify(payload);
       for (const q of l.clients) if (q !== c && q.pid >= 0 && m.teamOf(q.pid) === team && q.sock.ws.readyState === WebSocket.OPEN) q.sock.ws.send(out);
+      break;
+    }
+    // Fortnite-style dance / emote replication: broadcast to everyone in the match via the existing "mark" route
+    case "emote": {
+      const l = c.lobby, m = l?.match; if (!l || !m || c.pid < 0) break;
+      const now = Date.now(); if (now - c.markAt < 80) break; c.markAt = now;
+      const id = Number(msg.id);
+      if (!Number.isInteger(id) || id < -1 || id > 5) break;
+      const out = JSON.stringify({ t: "mark", pid: c.pid, emote: id });
+      for (const q of l.clients) if (q !== c && q.pid >= 0 && q.sock.ws.readyState === WebSocket.OPEN) q.sock.ws.send(out);
       break;
     }
     // (voice) the comms handshake relay, mic state, caster listen-ins (server/voice.ts)

@@ -9,6 +9,7 @@ import type { KongPose } from "./api";
 import type { WeaponId } from "../../../shared/world/map";
 import { WEAPON_DEFS } from "../../../shared/sim/const";
 import { ZIP_HANG } from "../../../shared/pois/canopy-line";
+import { EMOTES, applyDance, type DanceWriter } from "./emotes";
 
 export type BoneName = "hips" | "spine" | "chest" | "head" | "shoulderR" | "elbowR" | "wristR" | "shoulderL" | "elbowL" | "wristL" | "hipR" | "kneeR" | "ankleR" | "hipL" | "kneeL" | "ankleL";
 
@@ -148,6 +149,8 @@ function deadPose(p: Pose, w: number) {
   RS(p, "hip", 0.1 * w, 0, -0.3 * w); RS(p, "knee", -0.4 * w);
   R(p, "head", 0.3 * w, 0.6 * w); R(p, "spine", 0.05 * w);
 }
+const DANCE_WRITER: DanceWriter = { R, RS, H, ROOT, stance };
+
 function emoteDance(p: Pose, w: number, t: number) {
   const b = t * 4.2, s = Math.sin(b), c = Math.cos(b);
   stance(p, w);
@@ -407,7 +410,7 @@ export class KongAnimator {
   readonly world: THREE.Matrix4[] = Array.from({ length: NB }, () => new THREE.Matrix4());
   readonly root = new THREE.Matrix4();
   phase = 0; time = 0;
-  speed = 0; crouch = 0; airT = 0; landT = 9; jumpT = 9; deadT = 0; emote = 0; emoteT = 0;
+  speed = 0; crouch = 0; airT = 0; landT = 9; jumpT = 9; deadT = 0; emote = 0; emoteT = 0; private danceId = -1;
   /** 3P reload: starts on the RISING edge of pose.reloading, length = the sim's reloadS for the held weapon (per shell
    *  for the shotgun, looping), cancelled (0.12 s blend) on the falling edge or a weapon change */
   reloadT = 0; reloadDur = 2; reloadE = 0; reloadW = 0; reloadOn = false;
@@ -504,7 +507,7 @@ export class KongAnimator {
     const T = this.faceT; T.fill(0);
     const hurt = Math.min(1, Math.abs(this.hurt.x) * 2.5), fire = Math.min(1, Math.abs(this.recoil.x) * 3);
     const st = p.state;
-    const ex: FaceExpr = this.expression ?? (st === "dead" ? "dead" : st === "emote" ? "victory" : hurt > 0.15 ? "hurt" : st === "freefall" || st === "glide" || st === "zip" || st === "jump" && this.stateT < 0.3 ? "wow" : armed && (fire > 0.05 || Math.abs(this.aim) > 0.02 || p.crouch) ? "aim" : "idle");
+    const ex: FaceExpr = this.expression ?? (st === "dead" ? "dead" : st === "emote" ? (p.emote !== undefined ? (EMOTES[p.emote]?.expr ?? "victory") : "victory") : hurt > 0.15 ? "hurt" : st === "freefall" || st === "glide" || st === "zip" || st === "jump" && this.stateT < 0.3 ? "wow" : armed && (fire > 0.05 || Math.abs(this.aim) > 0.02 || p.crouch) ? "aim" : "idle");
     // [blink, gx, gy, squint, browUp, browAngry, jaw, smile]
     switch (ex) {
       // five faces anyone can name without labels — the mouth is painted from jaw + smile
@@ -616,8 +619,14 @@ export class KongAnimator {
     else { this.swimPitch = 0; this.swimPitchV = 0; this.swimMove = 0; this.swimSprint = 0; this.swimIn = 0; }
     if (dead) { this.deadT += dt; const k = sm(clamp01(this.deadT / 0.55)); deadPose(P, k); if (k < 1) { idle(P, 1 - k, t); R(P, "spine", 0.6 * (1 - k)); } }
     else this.deadT = 0;
-    if (st === "emote") { const k = sm(clamp01(this.stateT / 0.25)); if (k < 1) idle(P, 1 - k, t); this.emoteT += dt; [emoteDance, emoteCheer, emoteFlex][this.emote](P, k, this.emoteT); }
-    else this.emoteT = 0;
+    if (st === "emote") {
+      const k = sm(clamp01(this.stateT / 0.22));
+      if (k < 1) idle(P, 1 - k, t);
+      if (p.emote !== undefined && p.emote !== this.danceId) { this.danceId = p.emote; this.emoteT = 0; }
+      this.emoteT += dt;
+      if (p.emote !== undefined && p.emote >= 0) applyDance(p.emote, P, k, this.emoteT, DANCE_WRITER);
+      else [emoteDance, emoteCheer, emoteFlex][this.emote](P, k, this.emoteT);
+    } else { this.emoteT = 0; this.danceId = -1; }
     // landing squash
     if (grounded && this.land.x !== 0) { const s = -Math.min(0.45, Math.max(-0.1, this.land.x)); RS(P, "knee", -1.2 * s); RS(P, "hip", 0.5 * s); RS(P, "ankle", 0.4 * s); R(P, "spine", 0.5 * s); H(P, 0, -0.35 * s, 0); RS(P, "shoulder", 0.3 * s, 0, -0.3 * s); }
 

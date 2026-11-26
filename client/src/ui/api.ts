@@ -34,6 +34,11 @@ export interface SquadMate {
 
 export type SoundCueKind = "step" | "shot" | "chest" | "vehicle";
 export interface SoundCue { kind: SoundCueKind; angle: number; strength: number }
+export type PingKind = "move" | "enemy" | "danger" | "loot" | "chest" | "vehicle" | "shop";
+export interface WorldPing {
+  id: string; kind: PingKind; label: string; color: string;
+  x: number; z: number; sx: number; sy: number; edge: boolean; dist: number; fresh: number; mine: boolean;
+}
 
 export interface HudState {
   phase: MatchPhase;
@@ -148,7 +153,13 @@ export interface HudState {
    *  kill share a moment and pop as one row */
   accolades?: Array<{ at: number; id: AccoladeId; sub: string }>;
   /** optional: squadmates' map markers, in their squad colours */
-  squadMarks?: Array<{ x: number; z: number; color: string }>;
+  squadMarks?: Array<{ x: number; z: number; color: string; kind?: PingKind }>;
+  /** optional: 3D tactical pings (yours + squadmates') projected to screen + compass + maps */
+  pings?: WorldPing[];
+  /** optional: brief tactical ping callout toast */
+  pingToast?: { at: number; kind: PingKind; label: string; color: string; sub: string } | null;
+  /** optional: active Fortnite-style dance badge & cancel hint */
+  emote?: { name: string; color: string; key: string } | null;
   /** resurgence: on, my redeploy countdown, kills final. optional `lives` = solo redeploys left (null/absent = squad rule) */
   resurgence: { on: boolean; countdown: number | null; final: boolean; lives?: number | null };
   scoped: boolean;
@@ -314,7 +325,7 @@ export interface LobbyActions {
   /** optional (Wardrobe): ease the 3D title kong back to front-facing */
   resetHeroSpin?(): void;
   /** optional (Wardrobe): trigger celebration emote on the title kong */
-  emoteHero?(): void;
+  emoteHero?(id?: number): void;
 }
 export interface LobbyScreen {
   el: HTMLElement;

@@ -36,6 +36,8 @@ export interface KongPose {
   /** 0 = no team colour; else a squad slot for friend/foe outline tint */
   team: number;
   friendly: boolean;
+  /** optional Fortnite-style dance index (0..5 in actors/emotes.ts) when state === "emote"; absent = legacy cycle */
+  emote?: number;
 }
 
 /** kong-variety: one match's look — hat / top index (−1 = none; actors/outfits.ts HAT_IDS / TOP_IDS) and

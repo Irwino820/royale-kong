@@ -8,7 +8,7 @@ import type { POIS } from "../../../shared/world/map";
 import { drawGlyph, svgGlyph } from "./icons";
 import { drawPoiIcon } from "./poiicons";
 import { UI, U, addCss } from "./styles";
-import { airstrikeOverlay, bountyRing, drawPin, heliDot, hotDropHalo, mateMarker, planeAt, playerArrow, shotDot, standDot, supplyDot, tukDot, tukMe, uavEnemyDot, uavOverlay, SQUAD_COLOURS } from "./minimap";
+import { airstrikeOverlay, bountyRing, drawPin, heliDot, hotDropHalo, mateMarker, planeAt, playerArrow, shotDot, standDot, supplyDot, tacticalPingDot, tukDot, tukMe, uavEnemyDot, uavOverlay, SQUAD_COLOURS } from "./minimap";
 import { AIRSTRIKE } from "../../../shared/sim/const";
 import { preferences } from "../settings/preferences";
 import { backText, bindingText, glyphFamily, onLabelsChange } from "../settings/labels";
@@ -522,6 +522,7 @@ export class BigMap {
     const mk = mk0;
     if (s.squadMarks) for (const q of s.squadMarks) { const [x, y] = this.toScreen(q.x, q.z); drawPin(g, x, y, 21 * u, q.color); }
     if (mk) { const [x, y] = this.toScreen(mk.x, mk.z); drawPin(g, x, y, 25 * u); }
+    if (s.pings) for (const q of s.pings) if (q.kind !== "move") { const [x, y] = this.toScreen(q.x, q.z); tacticalPingDot(g, x, y, q.kind === "enemy" || q.kind === "danger", q.color, 11 * u, now); }
     if (s.me.alive) {
       const [x, y] = this.toScreen(s.me.x, s.me.z);
       const pr = (now % 1.4) / 1.4;

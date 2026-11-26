@@ -62,6 +62,10 @@ export class GameInput {
   /** a key for the game's own screens (map / inventory / pause): return true when it was handled (no browser default) */
   onKey: (code: string) => boolean | void = () => {};
   inMatch = false;
+  /** the game: the emote wheel is open — mouse deltas steer the radial wheel instead of spinning aim, and digits 1–6 pick a dance */
+  emoteWheelOpen = false;
+  private wheelDx = 0; private wheelDy = 0; private wheelNum = -1;
+  private emoteDownQueued = false; private emoteUpQueued = false;
   /** the game: my seat in a tuk-tuk (−1 = not riding) — at the bars 1 / 2 / 3 jump seats instead of picking a slot */
   rideSeat = -1;
   /** the game supplies its modal state (map, inventory, pause, results): only live gameplay moves, aims or fires.
@@ -114,6 +118,7 @@ export class GameInput {
     else { this.down.clear(); this.toggled.clear(); }
     this.pressed.clear(); this.pulses.clear(); this.padArmed.fill(false);
     this.forcedFire = false; this.forcedScope = false; this.scroll = 0; this.wheelAcc = 0; this.dx = 0; this.dy = 0;
+    this.wheelDx = 0; this.wheelDy = 0; this.wheelNum = -1; this.emoteDownQueued = false; this.emoteUpQueued = false; this.emoteWheelOpen = false;
     this.padPulse = 0; this.interactHeldT = -1; this.exitHeldT = -1; this.boostT = 0; this.bailT = -1;
   }
   private binds: Binds = DEFAULT_BINDS;
@@ -172,6 +177,7 @@ export class GameInput {
     addEventListener("contextmenu", (e) => e.preventDefault());
     addEventListener("mousemove", (e) => {
       if (!this.locked || !this.acceptsGameplay()) return;
+      if (this.emoteWheelOpen) { this.wheelDx += e.movementX; this.wheelDy += e.movementY; return; }
       this.dx += e.movementX; this.dy += e.movementY;
       const k = this.sens * this.sensScale * (this.aimMode === 2 ? this.scopeMultiplier : this.aimMode === 1 ? this.adsMultiplier : 1);
       this.yaw -= e.movementX * k;
@@ -203,12 +209,22 @@ export class GameInput {
       if (gameplay) this.press(e.code, "kbm");
       // behind the map / inventory: only the movement keys (you keep running; no fire, no look, no slot keys)
       else if (this.moveKey(e.code) && this.acceptsMove()) { this.press(e.code, "kbm"); e.preventDefault(); }
+      if (this.emoteWheelOpen && gameplay && /^Digit[1-6]$/.test(e.code)) {
+        this.wheelNum = Number(e.code[5]) - 1;
+        e.preventDefault();
+        return;
+      }
       const slot = this.binds.slots.indexOf(e.code); if (slot >= 0 && gameplay && !(this.rideSeat === 0 && slot < 3)) this.slotWanted = slot;
       const handled = this.onKey(e.code);
       // modal controls keep native Space / Enter activation and slider keys
       if (handled || (gameplay && this.gameKey(e.code))) e.preventDefault();
     });
-    addEventListener("keyup", (e) => { this.down.delete(e.code); if (this.acceptsGameplay() && this.gameKey(e.code)) e.preventDefault(); });
+    addEventListener("keyup", (e) => {
+      const wasDown = this.down.has(e.code);
+      this.down.delete(e.code);
+      if (wasDown && this.binds.emote.includes(e.code)) this.emoteUpQueued = true;
+      if (this.acceptsGameplay() && this.gameKey(e.code)) e.preventDefault();
+    });
     addEventListener("blur", () => this.clearHeld());
     // a capture that lands after a modal opened is handed straight back
     document.addEventListener("pointerlockchange", () => { const was = this.locked; this.locked = document.pointerLockElement === canvas;
@@ -226,6 +242,7 @@ export class GameInput {
   private press(code: string, dev: "kbm" | "pad") {
     this.down.add(code); this.pressed.add(code);
     if ((dev === "kbm" ? this.binds.ping : this.padCodes.ping)?.includes(code)) this.pingQueued = true;
+    if (dev === "kbm" && this.binds.emote.includes(code)) this.emoteDownQueued = true;
     const kbm = dev === "kbm", codes = (a: "sprint" | "crouch" | "aim") => kbm ? this.binds[a] : this.padCodes[a];
     const toggles = { sprint: kbm ? this.sprintToggle : this.pad.sprintMode === "toggle", crouch: kbm ? this.crouchToggle : this.pad.crouchToggle, aim: kbm ? this.aimToggle : this.pad.aimToggle };
     for (const a of ["sprint", "crouch", "aim"] as const) {
@@ -481,7 +498,7 @@ export class GameInput {
       if (bars) for (const c of pc.rideView) this.pressed.delete(c);
     }
     const fly = this.rideSeat === 0 && this.flying();
-    if (this.fire && allowFire) bits |= B.FIRE;
+    if (this.fire && allowFire && !this.emoteWheelOpen) bits |= B.FIRE;
     if (this.has(b.jump) || this.has(pc.jump)) bits |= B.JUMP;
     // the helicopter's collective: jump / the right trigger = up, the sprint key / the left trigger = down
     if (fly) { if (this.has(pc.fire)) bits |= B.JUMP; if (this.has(b.sprint) || this.has(pc.aim)) bits |= B.DESCEND; }
@@ -530,5 +547,10 @@ export class GameInput {
   /** the ping key went down since the last call (read once per drawn frame by the game) */
   private pingQueued = false;
   takePing() { const p = this.pingQueued; this.pingQueued = false; return p; }
+  takeEmoteDown() { const v = this.emoteDownQueued; this.emoteDownQueued = false; return v; }
+  takeEmoteUp() { const v = this.emoteUpQueued; this.emoteUpQueued = false; return v; }
+  emoteHeld() { return this.has(this.binds.emote); }
+  takeWheelNum() { const n = this.wheelNum; this.wheelNum = -1; return n; }
+  takeWheelDelta(out: [number, number]) { out[0] = this.wheelDx; out[1] = this.wheelDy; this.wheelDx = 0; this.wheelDy = 0; }
   consumeMouse() { const r: [number, number] = [this.dx, this.dy]; this.dx = 0; this.dy = 0; return r; }
 }

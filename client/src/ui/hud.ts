@@ -5,7 +5,7 @@
 import { CONSUMABLES, POIS, RARITY_COLOR, type ConsumableId, type Rarity, type WeaponId } from "../../../shared/world/map";
 import { CONSUMABLE_DEFS, WEAPON_DEFS } from "../../../shared/sim/const";
 import type { Terrain } from "../../../shared/world/terrain";
-import type { Hud, HudState, IconRenderer } from "./api";
+import type { Hud, HudState, IconRenderer, PingKind } from "./api";
 import { hudUnit, injectStyles, RARITY_DEEP, UI } from "./styles";
 import { createMapImage, type PaintedMap } from "./mapimage";
 import { itemIconUrl, preloadItems, svgGlyph, weaponSilhouette, drawGlyph } from "./icons";
@@ -51,6 +51,16 @@ const tog = (e: Element, cls: string, on: boolean) => { if (e.classList.contains
 const ease = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 
 const EMPTY_MATES: NonNullable<HudState["mates"]> = [];
+const EMPTY_PINGS: NonNullable<HudState["pings"]> = [];
+const PING_SVG: Record<PingKind, string> = {
+  move: `<path d="M12 3L4 20l8-4 8 4z"/>`,
+  enemy: `<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="12" r="2.2"/>`,
+  danger: `<path d="M12 3L2 20h20z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M12 9v5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17" r="1.4"/>`,
+  loot: `<path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/>`,
+  chest: `<rect x="3" y="7" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M3 12h18M10 12v3h4v-3" fill="none" stroke="currentColor" stroke-width="2.2"/>`,
+  vehicle: `<rect x="4" y="6" width="16" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="2.3"/><circle cx="8" cy="18" r="2"/><circle cx="16" cy="18" r="2"/>`,
+  shop: `<path d="M4 9l2-5h12l2 5M5 9v10h14V9M12 12v4M10 14h4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
+};
 export function createHud(terrain: Terrain, pois: typeof POIS): Hud {
   injectStyles();
   void preloadItems();
@@ -223,6 +233,30 @@ export function createHud(terrain: Terrain, pois: typeof POIS): Hud {
     mtags.push({ box, lab, arr, nm: el("span", "nm", lab), d: el("span", "d", lab), st: el("span", "st", lab), key: "", on: false, lift: 0 });
   }
 
+  // 3D tactical ping world markers (up to 6 active: enemy/danger/loot/chest/vehicle/shop/move)
+  const ptagWrap = el("div", "kr-ptags", root);
+  interface PTag { box: HTMLElement; ico: HTMLElement; svg: SVGSVGElement; arr: HTMLElement; nm: HTMLElement; d: HTMLElement; key: string; kind: string; on: boolean }
+  const ptags: PTag[] = [];
+  for (let i = 0; i < 6; i++) {
+    const box = el("div", "kr-ptag kr-hide", ptagWrap);
+    const arr = el("div", "arr", box);
+    const ico = el("div", "ico", box);
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("fill", "currentColor");
+    ico.appendChild(svg);
+    const lab = el("div", "lab", box);
+    ptags.push({ box, ico, svg, arr, nm: el("span", "nm", lab), d: el("span", "d", lab), key: "", kind: "", on: false });
+  }
+  const pingToastEl = el("div", "kr-ptoast kr-hide", root);
+  const pingToastLabel = el("b", "", pingToastEl);
+  const pingToastSub = el("small", "", pingToastEl);
+  let pingToastAt = -1, pingToastUntil = 0;
+
+  const emoteChip = el("div", "kr-emote-chip kr-hide", root);
+  const emoteChipNm = el("span", "nm", emoteChip);
+  const emoteChipHint = el("small", "", emoteChip);
+  let emoteChipKey = "";
+
   // centre
   const centerWrap = el("div", "kr-center", root);
   const center = new CenterLayer();
@@ -390,6 +424,7 @@ export function createHud(terrain: Terrain, pois: typeof POIS): Hud {
     if (s.econ?.bounty) marks += `b${Math.round(bearing(s.me.x, s.me.z, s.econ.bounty.x, s.econ.bounty.z))};`;
     for (const q of s.squad) if (!q.me) marks += `q${Math.round(bearing(s.me.x, s.me.z, q.x, q.z))};`;
     if (s.squadMarks) for (const q of s.squadMarks) marks += `m${Math.round(bearing(s.me.x, s.me.z, q.x, q.z))}${q.color};`;
+    if (s.pings) for (const q of s.pings) if (q.kind !== "move") marks += `p${q.kind}${Math.round(bearing(s.me.x, s.me.z, q.x, q.z))}${q.color};`;
     if (Math.abs(heading - last.heading) < 0.03 && marks === last.compMarks) return;
     last.heading = heading; last.compMarks = marks;
     // design px (760 wide, 5.4 px per degree, a label every 15°): the centre mark on top, the labels
@@ -432,6 +467,7 @@ export function createHud(terrain: Terrain, pois: typeof POIS): Hud {
       g.stroke(); g.fill();
     };
     if (s.squadMarks) for (const q of s.squadMarks) mark(bearing(s.me.x, s.me.z, q.x, q.z), q.color, true);
+    if (s.pings) for (const q of s.pings) if (q.kind !== "move") mark(bearing(s.me.x, s.me.z, q.x, q.z), q.color, q.kind === "enemy" || q.kind === "danger");
     if (s.dropMarker) {
       // the marker's distance beside its pin
       const b = bearing(s.me.x, s.me.z, s.dropMarker.x, s.dropMarker.z); mark(b, TOON.accent, true);
@@ -619,6 +655,59 @@ export function createHud(terrain: Terrain, pois: typeof POIS): Hud {
       txt(t.nm, m.name); txt(t.d, `${Math.round(m.dist)} M`);
       txt(t.st, m.state === "redeploy" ? "REDEPLOYING" : m.state === "air" ? "IN THE AIR" : "");
       t.arr.style.transform = `rotate(${ang.toFixed(3)}rad)`;
+    }
+
+    // ---- 3D tactical ping world badges
+    const ps = s.pings ?? EMPTY_PINGS;
+    for (let i = 0; i < ptags.length; i++) {
+      const pt = ptags[i], q = ps[i];
+      const on = !!q && !s.scoped && !mapOpen;
+      if (on !== pt.on) { pt.on = on; pt.box.classList.toggle("kr-hide", !on); }
+      if (!on || !q) continue;
+      let x = q.sx * vw, y = q.sy * vh, edge = q.edge;
+      const tu = u * 1440 / 1080, mx = vw * 0.065, mxL = Math.max(mx, 310 * tu), myT = Math.max(vh * 0.16, 230 * tu), myB = vh * 0.22;
+      if (!edge && (x < mxL || x > vw - mx || y < myT || y > vh - myB)) edge = true;
+      let ang = 0;
+      if (edge) {
+        const cx = vw / 2, cy = vh / 2, dx = x - cx, dy = y - cy, l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l;
+        const kx = ux > 0 ? (vw - mx - cx) / ux : ux < 0 ? (mxL - cx) / ux : 1e9;
+        const ky = uy > 0 ? (vh - myB - cy) / uy : uy < 0 ? (myT - cy) / uy : 1e9;
+        const k = Math.min(kx, ky);
+        x = cx + ux * k; y = cy + uy * k; ang = Math.atan2(uy, ux);
+      }
+      const sc = q.fresh > 0 && !calm() ? 1 + q.fresh * 0.38 : 1;
+      pt.box.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${sc.toFixed(3)})`;
+      if (pt.kind !== q.kind) { pt.kind = q.kind; pt.svg.innerHTML = PING_SVG[q.kind]; }
+      const key = `${q.id}|${q.kind}|${q.color}|${q.label}|${Math.round(q.dist)}|${edge ? Math.round(ang * 20) : "x"}`;
+      if (key !== pt.key) {
+        pt.key = key;
+        pt.box.style.setProperty("--c", q.color);
+        pt.box.className = `kr-ptag ${q.kind}${edge ? " edge" : ""}`;
+        txt(pt.nm, q.label);
+        txt(pt.d, q.dist < 995 ? `${Math.round(q.dist)} M` : `${(q.dist / 1000).toFixed(1)} KM`);
+        pt.arr.style.transform = `rotate(${ang.toFixed(3)}rad)`;
+      }
+    }
+    const pto = s.pingToast;
+    if (pto && pto.at !== pingToastAt) {
+      pingToastAt = pto.at; pingToastUntil = now + 3.0;
+      pingToastEl.style.setProperty("--c", pto.color);
+      txt(pingToastLabel, pto.label); txt(pingToastSub, pto.sub);
+      pingToastEl.classList.remove("kr-hide");
+      if (!calm()) pingToastEl.animate([{ transform: "translate(-50%, -10px) scale(.92)", opacity: 0 }, { transform: "translate(-50%, 0) scale(1)", opacity: 1 }], { duration: 180, easing: "ease-out" });
+    }
+    if (pingToastUntil > 0 && now > pingToastUntil) { pingToastUntil = 0; pingToastEl.classList.add("kr-hide"); }
+
+    const em = s.emote;
+    const emKey = em && !mapOpen ? `${em.name}|${em.color}|${em.key}` : "";
+    if (emKey !== emoteChipKey) {
+      emoteChipKey = emKey;
+      if (em && !mapOpen) {
+        emoteChip.style.setProperty("--c", em.color);
+        txt(emoteChipNm, em.name);
+        txt(emoteChipHint, `MOVE TO CANCEL · HOLD ${em.key} TO SWITCH`);
+        emoteChip.classList.remove("kr-hide");
+      } else emoteChip.classList.add("kr-hide");
     }
 
     // ---- the weapons parts: ammo, TOP BANANA, hotbar, lethal chip (ui/hotbar.ts) · the interact / loot card, the

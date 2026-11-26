@@ -19,7 +19,7 @@ import type { AirHands } from "../weapons/viewmodel";
 import type { GameAudio, PoiTheme, Sfx } from "../audio/api";
 import type { StormVisual } from "./storm/api";
 import { stageLength } from "../../../shared/sim/storm";
-import type { AccoladeId, Hud, HudState, HotbarSlot, SoundCue, SoundCueKind } from "../ui/api";
+import type { AccoladeId, Hud, HudState, HotbarSlot, PingKind, SoundCue, SoundCueKind, WorldPing } from "../ui/api";
 import { ClientMatch, type EventSink, type Remote } from "./client";
 import type { GameInput } from "./input";
 import { AMMO_TYPES, B, PS, SK, consumableId, weaponId, rarityOf, eyeY as simEyeY, canPullChute, FF_DOWN, FF_DIVE_DOWN, type Player } from "../../../shared/sim/player";
@@ -70,6 +70,10 @@ import type { WaterApi } from "../world/water/api";
 import { BombFx, bombPrefabs } from "./bomb";
 import { SmokeFx, smokePrefabs } from "./smoke-fx";
 import { TacticalFx, tacticalPrefabs } from "./tactical-fx";
+import { EMOTES, isDanceId, type DanceId } from "../actors/emotes";
+import { EmoteMusic } from "../audio/emote-music";
+import { createEmoteWheel, type EmoteWheel } from "../ui/emote-wheel";
+import { PING_COLOR, PING_TTL_MS, isPingKind, resolveContextualPing, type ActivePing } from "./tactical-ping";
 import { AIRSTRIKE_TARGET, GRAPPLE_TARGET, airstrikeTrace, grappleTrace } from "../../../shared/sim/grapple";
 import type { WeaponsKitEx } from "../weapons/index";
 import { CoverViews, coverGhostPrefab } from "./cover";
@@ -1089,7 +1093,7 @@ export class GameRender implements EventSink {
   phase(phase: number) {
     if (phase === 0 || phase === 1) this.input.slotWanted = 0;
     if (phase === 1) { this.placeSeen.fill(0); this.hud.place = null; this.hud.where = null; this.acc.reset(); if (this.hud.accolades) this.hud.accolades.length = 0; this.hud.pickup = null; this.deathSummary = null; this.incomingHits.length = 0; this.totalSquads = this.cm.mode === "solo" ? 50 : 17; this.kills = 0; this.redeploysUsed = 0; this.headshots = 0; this.chestsOpened = 0; this.damage = 0; this.deadAt = -1; this.resCountdown = null; this.placement = 0; this.hud.killfeed.length = 0; this.rampOpen = 0; this.planeCamInit = false; }   // (the warm-up's map pin stays: it marks your drop)
-    if (phase === 0 || phase === 1) { this.victoryAt = -1; this.uavUntil = 0; this.fireSaleUntil = 0; this.smokeFx?.clear(); this.tacticalFx?.clear(); if (this.meActor) this.meActor.setVisible(false); }
+    if (phase === 0 || phase === 1) { this.victoryAt = -1; this.uavUntil = 0; this.fireSaleUntil = 0; this.stopDance(false); this.activePings.clear(); this.remoteEmotes.clear(); this.smokeFx?.clear(); this.tacticalFx?.clear(); if (this.meActor) this.meActor.setVisible(false); }
     if (phase === 0) { this.stopAllLoops(); this.deadAt = -1; if (this.range) this.announce("FIRING RANGE", "every item on the rack behind you · targets respawn", "info"); else this.announce("WARM-UP", "loot up, shoot around — the plane leaves soon", "info"); }
   }
   inventory() { this.syncViewModel(); }
@@ -1162,53 +1166,300 @@ export class GameRender implements EventSink {
     }
     return 0;
   };
-  // ---- map marker beams: your marker (+ squadmates', ClientMatch.squadMarks) as towers of light
+  // ---- map marker beams & 3D contextual tactical pings
   private readonly markers: MarkerBeams;
   private readonly markList: MarkerSpec[] = [];
   /** squadmates' markers (trios; the server relays {t:"mark"} to the squad only): pid → spot */
   private readonly squadMarkAt = new Map<number, { x: number; z: number }>();
   private readonly squadMarkRows: NonNullable<HudState["squadMarks"]> = [];
-  /** my marker: set (map click, ping) or cleared — and shared with the squad (the server drops it in solo) */
-  setMark(x: number | null, z = 0) {
-    if (x === null) { if (!this.hud.dropMarker) return; this.hud.dropMarker = null; this.cm.link.sendJSON({ t: "mark", clear: true }); return; }
-    this.hud.dropMarker = { x, z }; this.sfx("ui:click", { volume: 0.6 });
-    this.cm.link.sendJSON({ t: "mark", x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
+  /** active 3D tactical pings (yours + squadmates'), keyed by owner + slot ("me:move", "me:tac", "p3:enemy", …) */
+  private readonly activePings = new Map<string, ActivePing>();
+  private readonly worldPingRows: WorldPing[] = [];
+  private lastPingAt = -1e9;
+  // ---- Fortnite-style emotes (radial wheel, 3rd-person orbit camera, procedural music, multiplayer sync)
+  private emoteWheel: EmoteWheel | null = null;
+  private emoteMusic: EmoteMusic | null = null;
+  private dancingId: DanceId | -1 = -1;
+  private lastDanceId: DanceId = 0;
+  private danceBodyYaw = 0;
+  private danceCamFree = 1;
+  private danceHpSnap = 200;
+  private danceWheelAt = 0;
+  private readonly wheelDelta: [number, number] = [0, 0];
+  private readonly remoteEmotes = new Map<number, { id: DanceId; at: number }>();
+  private readonly emoteHudObj = { name: "", color: "", key: "" };
+
+  private ensureEmoteKit() {
+    if (!this.emoteMusic) {
+      const a = this.kits.audio as GameAudio & { ctx?: BaseAudioContext };
+      const em = new EmoteMusic(() => a.ctx ?? null);
+      this.emoteMusic = em;
+      this.matchScope.defer(() => em.dispose());
+    }
+    if (!this.emoteWheel) {
+      const parent = this.kits.hud.el.parentElement ?? document.body;
+      const w = createEmoteWheel(parent);
+      w.onPick = (id) => { this.closeEmoteWheel(); this.startDance(id); };
+      w.onStop = () => { this.closeEmoteWheel(); this.stopDance(); };
+      this.emoteWheel = w;
+      this.matchScope.defer(() => { this.input.emoteWheelOpen = false; w.dispose(); });
+    }
   }
-  /** a squadmate placed / cleared a marker (JSON {t:"mark", pid, x, z} / {t:"mark", pid, clear}) */
+  private closeEmoteWheel() {
+    this.input.emoteWheelOpen = false;
+    this.emoteWheel?.hide();
+  }
+  private canDance(): boolean {
+    const p = this.cm.pred;
+    return p.st === PS.Ground && p.grounded && !p.swim && p.hp > 0 && this.victoryAt < 0 && !this.cm.viewTarget() && !this.caster;
+  }
+  private startDance(id: DanceId) {
+    if (!this.canDance()) return;
+    this.ensureEmoteKit();
+    const p = this.cm.pred;
+    const wasDancing = this.dancingId >= 0;
+    this.dancingId = id;
+    this.lastDanceId = id;
+    this.danceHpSnap = p.hp + p.shield;
+    if (!wasDancing) {
+      this.danceBodyYaw = this.input.yaw;
+      // swing camera to the Kong's front so you see the dance & grin immediately (mouse freely orbits 360°)
+      this.input.yaw = this.danceBodyYaw + Math.PI;
+      this.input.pitch = -0.18;
+      this.danceCamFree = 1;
+    }
+    if (!this.meActor && !this.meActorPending) {
+      this.meActorPending = true;
+      void this.kits.createKong(this.engine, { variant: Math.max(0, this.cm.me) % 6 }).then((a) => {
+        this.meActor = a; a.setOutfit?.(outfitForPlayer(this.cm.me, this.cm.seed, true));
+        this.engine.scene.add(a.object); patchTree(this.engine, a.object);
+      });
+    }
+    this.emoteMusic?.start(id, 1);
+    this.cm.link.sendJSON({ t: "emote", id });
+  }
+  private stopDance(broadcast = true) {
+    if (this.dancingId < 0) return;
+    this.dancingId = -1;
+    this.input.yaw = this.danceBodyYaw;
+    this.input.pitch = Math.max(-0.4, Math.min(0.4, this.input.pitch));
+    this.emoteMusic?.stop();
+    if (broadcast) this.cm.link.sendJSON({ t: "emote", id: -1 });
+  }
+  private stepEmotes(dt: number, victory: boolean, spec: boolean, dead: boolean, inPlane: boolean, myVeh: boolean) {
+    const p = this.cm.pred, inp = this.input, now = performance.now();
+    const blocked = victory || spec || dead || inPlane || myVeh || !!this.caster || this.kits.hud.mapOpen || !inp.gameplayAllowed();
+    if (blocked) {
+      if (inp.emoteWheelOpen) this.closeEmoteWheel();
+      if (this.dancingId >= 0 && !victory) this.stopDance(!dead);
+    } else {
+      if (inp.takeEmoteDown()) {
+        this.ensureEmoteKit();
+        this.danceWheelAt = now;
+        inp.emoteWheelOpen = true;
+        this.emoteWheel!.show(this.lastDanceId, bindingText("emote", 0).toUpperCase() || "H", this.dancingId >= 0);
+        this.sfx("ui:click", { volume: 0.45 });
+      }
+      if (inp.emoteWheelOpen && this.emoteWheel) {
+        inp.takeWheelDelta(this.wheelDelta);
+        if (this.wheelDelta[0] || this.wheelDelta[1]) this.emoteWheel.moveDelta(this.wheelDelta[0], this.wheelDelta[1]);
+        const num = inp.takeWheelNum();
+        if (isDanceId(num)) { this.closeEmoteWheel(); this.startDance(num); }
+        else if (inp.fire) {
+          const pick = this.emoteWheel.selected;
+          this.closeEmoteWheel();
+          if (isDanceId(pick)) this.startDance(pick);
+          else if (this.dancingId >= 0) this.stopDance();
+        } else if (inp.takeEmoteUp() || !inp.emoteHeld()) {
+          const pick = this.emoteWheel.selected;
+          const quickTap = now - this.danceWheelAt < 260;
+          this.closeEmoteWheel();
+          if (isDanceId(pick)) this.startDance(pick);
+          else if (quickTap) {
+            if (this.dancingId >= 0) this.stopDance();
+            else this.startDance(this.lastDanceId);
+          } else if (this.dancingId >= 0) this.stopDance();
+        }
+      } else {
+        inp.takeEmoteUp(); inp.takeWheelNum();
+      }
+      // cancel active dance immediately on movement, combat action, or taking damage
+      if (this.dancingId >= 0) {
+        const cur = this.cm.cur;
+        const moving = Math.abs(cur.mx) > 0.05 || Math.abs(cur.mz) > 0.05;
+        const acting = (cur.buttons & (B.FIRE | B.JUMP | B.CROUCH | B.SCOPE | B.RELOAD | B.USE | B.THROW)) !== 0;
+        const damaged = (p.hp + p.shield) < this.danceHpSnap - 0.5;
+        this.danceHpSnap = Math.min(this.danceHpSnap, p.hp + p.shield);
+        if (moving || acting || damaged || !this.canDance()) this.stopDance();
+      }
+    }
+    // spatial music from a nearby dancing remote player when we aren't dancing ourselves
+    if (this.dancingId < 0 && !victory && this.remoteEmotes.size > 0) {
+      let bestId: DanceId | -1 = -1, bestD2 = 24 * 24;
+      const cx = this.engine.camera.position.x, cy = this.engine.camera.position.y, cz = this.engine.camera.position.z;
+      for (const [pid, re] of this.remoteEmotes) {
+        const r = this.cm.remotes[pid];
+        if (!r || r.n === 0 || r.st !== PS.Ground) continue;
+        const d2 = (r.x - cx) ** 2 + (r.y - cy) ** 2 + (r.z - cz) ** 2;
+        if (d2 < bestD2) { bestD2 = d2; bestId = re.id; }
+      }
+      if (isDanceId(bestId)) {
+        this.ensureEmoteKit();
+        const gain = Math.max(0.08, 1 - Math.sqrt(bestD2) / 24);
+        this.emoteMusic?.start(bestId, gain * 0.7);
+      } else this.emoteMusic?.stop();
+    }
+    void dt;
+  }
+  /** Fortnite-style 3rd-person orbit camera around your dancing Kong (collision-checked via camCast). */
+  private danceCamera(dt: number) {
+    const cm = this.cm, cam = this.engine.camera, inp = this.input;
+    cm.localPose(V3);
+    const orbitYaw = inp.yaw;
+    const orbitPitch = Math.max(-0.82, Math.min(0.32, inp.pitch));
+    inp.pitch = orbitPitch;
+    const dist = 3.7, hy = V3.y + 1.35;
+    const cp = Math.cos(orbitPitch), sp = Math.sin(orbitPitch);
+    const ox = Math.sin(orbitYaw) * cp * dist;
+    const oy = -sp * dist + 0.35;
+    const oz = Math.cos(orbitYaw) * cp * dist;
+    const tx = V3.x + ox, ty = Math.max(V3.y + 0.35, hy + oy), tz = V3.z + oz;
+    const want = Math.hypot(tx - V3.x, ty - hy, tz - V3.z);
+    const free = camCast(cm.world, V3.x, hy, V3.z, tx, ty, tz, 0.28);
+    const u = want > 1e-3 ? Math.max(0.28, free / want) : 1;
+    this.danceCamFree += (Math.min(1, u) - this.danceCamFree) * (u < this.danceCamFree ? 1 : Math.min(1, dt * 6));
+    const uu = this.danceCamFree;
+    cam.position.set(V3.x + (tx - V3.x) * uu, hy + (ty - hy) * uu, V3.z + (tz - V3.z) * uu);
+    cam.lookAt(V3.x, V3.y + 1.15, V3.z);
+  }
+  /** my marker / tactical ping: set (map click, contextual 3D ping) or cleared — shared with the squad & trios bots */
+  setMark(x: number | null, z = 0, opts?: { y?: number; kind?: PingKind; label?: string; color?: string }) {
+    const kind: PingKind = opts?.kind ?? "move";
+    if (x === null) {
+      if (!this.hud.dropMarker && !this.activePings.has("me:move")) return;
+      this.hud.dropMarker = null;
+      this.activePings.delete("me:move");
+      this.cm.link.sendJSON({ t: "mark", clear: true, kind: "move" });
+      return;
+    }
+    const y = opts?.y ?? (Math.max(0, this.engine.terrain.height(x, z)) + 0.6);
+    const color = opts?.color ?? PING_COLOR[kind];
+    const label = opts?.label ?? (kind === "move" ? "MOVE HERE" : kind.toUpperCase());
+    const now = performance.now();
+    const slotKey = kind === "move" ? "me:move" : "me:tac";
+    this.activePings.set(slotKey, { id: slotKey, pid: this.cm.me, kind, label, color, x, y, z, at: now, ttlMs: PING_TTL_MS[kind], mine: true });
+    if (kind === "move") this.hud.dropMarker = { x, z };
+    // distinct tactical ping audio cues
+    if (kind === "enemy" || kind === "danger") { this.kits.audio.play("ui:countdown", { volume: 0.72, rate: 1.35 }); gamepads.rumble(0.14, 0.28, 60); }
+    else if (kind === "loot" || kind === "chest") { this.kits.audio.play("pickup:weapon", { volume: 0.45, rate: 1.25 }); }
+    else { this.kits.audio.play("ui:click", { volume: 0.65, rate: kind === "vehicle" || kind === "shop" ? 1.18 : 1 }); }
+    const dist = Math.hypot(x - this.cm.pred.x, z - this.cm.pred.z);
+    const distStr = dist < 995 ? `${Math.round(dist)} M` : `${(dist / 1000).toFixed(1)} KM`;
+    this.hud.pingToast = { at: now, kind, label, color, sub: distStr };
+    this.cm.link.sendJSON({ t: "mark", x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, z: Math.round(z * 10) / 10, kind, label, color });
+  }
+  /** a squadmate's marker / tactical ping, OR any remote kong's dance emote ({t:"mark", pid, emote}) */
   squadMark(m: Record<string, unknown>) {
     const pid = Number(m.pid); if (!Number.isInteger(pid) || pid === this.cm.me) return;
-    if (m.clear === true || typeof m.x !== "number" || typeof m.z !== "number") { this.squadMarkAt.delete(pid); return; }
-    this.squadMarkAt.set(pid, { x: m.x, z: m.z });
-    if (!this.muteAnnounce) this.sfx("ui:click", { volume: 0.45 });
+    if (m.emote !== undefined) {
+      const eid = Number(m.emote);
+      if (isDanceId(eid)) this.remoteEmotes.set(pid, { id: eid, at: performance.now() });
+      else this.remoteEmotes.delete(pid);
+      return;
+    }
+    const kind: PingKind = isPingKind(m.kind) ? m.kind : "move";
+    const key = `p${pid}:${kind === "move" ? "move" : "tac"}`;
+    if (m.clear === true || typeof m.x !== "number" || typeof m.z !== "number") {
+      if (kind === "move") this.squadMarkAt.delete(pid);
+      this.activePings.delete(key);
+      return;
+    }
+    const x = m.x, z = m.z, y = typeof m.y === "number" ? m.y : (Math.max(0, this.engine.terrain.height(x, z)) + 0.6);
+    const color = typeof m.color === "string" && /^#[0-9a-fA-F]{6}$/.test(m.color) ? m.color : PING_COLOR[kind];
+    const label = typeof m.label === "string" && m.label ? m.label : (kind === "move" ? this.name(pid).toUpperCase() : kind.toUpperCase());
+    const now = performance.now();
+    if (kind === "move") this.squadMarkAt.set(pid, { x, z });
+    this.activePings.set(key, { id: key, pid, kind, label, color, x, y, z, at: now, ttlMs: PING_TTL_MS[kind], mine: false });
+    if (!this.muteAnnounce) {
+      this.kits.audio.play(kind === "enemy" || kind === "danger" ? "ui:countdown" : "ui:click", { volume: 0.55, rate: kind === "enemy" || kind === "danger" ? 1.25 : 1.05 });
+      const dist = Math.hypot(x - this.cm.pred.x, z - this.cm.pred.z);
+      this.hud.pingToast = { at: now, kind, label: `${this.name(pid).toUpperCase()}: ${label}`, color, sub: dist < 995 ? `${Math.round(dist)} M` : `${(dist / 1000).toFixed(1)} KM` };
+    }
   }
-  /** the ping key: the spot under the crosshair (terrain + the world, up to 3 km — from the plane, falling, gliding or
-   * on foot) becomes my marker; pinging at it again (within 25 m) clears it */
+  /** contextual 3D ping under the crosshair (enemy / danger double-tap / loot / vehicle / chest / shop / location) */
   private ping() {
     const cm = this.cm, p = cm.pred; if (p.st === PS.Dead || p.st === PS.Spectate || this.kits.hud.mapOpen) return;
+    const now = performance.now();
+    const doubleTap = now - this.lastPingAt < 420;
+    this.lastPingAt = now;
     const cam = this.engine.camera; cam.getWorldDirection(V3);
-    cm.world.raycast(cam.position.x, cam.position.y, cam.position.z, V3.x, V3.y, V3.z, 3000, PING_HIT, false);
-    if (!PING_HIT.hit) { this.sfx("ui:click", { volume: 0.25 }); return; }
-    const x = cam.position.x + V3.x * PING_HIT.t, z = cam.position.z + V3.z * PING_HIT.t, mk = this.hud.dropMarker;
-    if (mk && Math.hypot(mk.x - x, mk.z - z) < 25) this.setMark(null); else this.setMark(x, z);
+    const res = resolveContextualPing({
+      camX: cam.position.x, camY: cam.position.y, camZ: cam.position.z,
+      dirX: V3.x, dirY: V3.y, dirZ: V3.z,
+      world: cm.world, remotes: cm.remotes, items: cm.items, chests: cm.chests,
+      vehicles: cm.vehicles, stands: cm.stands, me: cm.me, myTeam: p.team,
+      snapTick: cm.snapTick(), existingMove: this.hud.dropMarker, doubleTap,
+    });
+    if (res.action === "miss") { this.sfx("ui:click", { volume: 0.25 }); return; }
+    if (res.action === "clear") { this.setMark(null); return; }
+    this.setMark(res.x, res.z, { y: res.y, kind: res.kind, label: res.label, color: res.color });
   }
   private updateMarkers(dt: number) {
     if (this.input.takePing()) this.ping();
+    const now = performance.now();
+    // expire timed tactical pings
+    for (const [k, ap] of this.activePings) {
+      if (ap.ttlMs !== Infinity && now - ap.at > ap.ttlMs) this.activePings.delete(k);
+    }
     const L = this.markList; L.length = 0;
+    // prioritize tactical (enemy/danger/loot/vehicle) beams first, then persistent move/squad beams (up to 4 beams)
+    for (const ap of this.activePings.values()) {
+      if (ap.kind === "move" || L.length >= 4) continue;
+      L.push(markSpec(L.length, ap.x, ap.z, ap.color, `${ap.id}:${ap.kind}`));
+    }
     const mk = this.hud.dropMarker;
-    if (mk) L.push(markSpec(0, mk.x, mk.z, UI_YELLOW, "me"));
-    // squadmates' markers in their squad colours (the colour order of the squad rows / tags)
+    if (mk && L.length < 4) L.push(markSpec(L.length, mk.x, mk.z, UI_YELLOW, "me"));
+    // squadmates' move markers in their squad colours (the colour order of the squad rows / tags)
     const rows = this.squadMarkRows; rows.length = 0;
     if (this.squadMarkAt.size && this.cm.mode === "trios") {
       let k = 0; const team = this.cm.pred.team;
       for (const r of this.cm.remotes) {
         if (r.n <= 0 || r.team !== team || r.id === this.cm.me) continue;
         const sm = this.squadMarkAt.get(r.id), col = SQUAD_COLOURS[k++ % SQUAD_COLOURS.length];
-        if (!sm || L.length >= 4) continue;
-        L.push(markSpec(L.length, sm.x, sm.z, col, `p${r.id}`)); rows.push({ x: sm.x, z: sm.z, color: col });
+        if (!sm) continue;
+        if (L.length < 4) L.push(markSpec(L.length, sm.x, sm.z, col, `p${r.id}`));
+        rows.push({ x: sm.x, z: sm.z, color: col });
       }
     }
     this.hud.squadMarks = rows;
     this.markers.update(dt, this.engine.camera.position, L);
+  }
+  /** project active 3D tactical pings into screen coordinates (reuses worldPingRows; zero per-frame allocations) */
+  private projectPings(cam: THREE.Camera, mePos: THREE.Vector3) {
+    const out = this.worldPingRows, now = performance.now();
+    let pn = 0;
+    for (const ap of this.activePings.values()) {
+      if (pn >= 6) break;
+      const dist = Math.hypot(ap.x - mePos.x, ap.y - mePos.y, ap.z - mePos.z);
+      // hide own plain move marker once you arrive right on top of it
+      if (ap.kind === "move" && dist < 8) continue;
+      const row = out[pn] ??= { id: "", kind: "move", label: "", color: UI_YELLOW, x: 0, z: 0, sx: 0, sy: 0, edge: false, dist: 0, fresh: 0, mine: true };
+      pn++;
+      V3b.set(ap.x, ap.y, ap.z).applyMatrix4(cam.matrixWorldInverse);
+      if (V3b.z > -0.2) {
+        const l = Math.hypot(V3b.x, V3b.y) || 1;
+        row.sx = 0.5 + (V3b.x / l) * 0.5; row.sy = 0.5 - (V3b.y / l) * 0.5; row.edge = true;
+      } else {
+        V3b.applyMatrix4(cam.projectionMatrix);
+        row.sx = (V3b.x + 1) / 2; row.sy = (1 - V3b.y) / 2; row.edge = false;
+      }
+      row.id = ap.id; row.kind = ap.kind; row.label = ap.label; row.color = ap.color;
+      row.x = ap.x; row.z = ap.z; row.dist = dist;
+      row.fresh = Math.max(0, 1 - (now - ap.at) / 380);
+      row.mine = ap.mine;
+    }
+    out.length = pn;
+    this.hud.pings = out;
   }
   // ---- location banner: the FIRST time you reach a named
   // place in a match its name comes up in the centre with its own faint sound (once per place per match: a
@@ -1266,17 +1517,20 @@ export class GameRender implements EventSink {
     const myVeh = !dead && !victory && !spec ? cm.myVehicle() : null;
     this.specSmooth(spec, dt);
     this.updateVehicles(dt, t);
+    this.stepEmotes(dt, victory, !!spec, dead, inPlane, !!myVeh);
+    const dancing = this.dancingId >= 0 && !victory && !spec && !inPlane && !dead && !myVeh;
     if (this.caster) this.caster.camera(dt);
     else if (victory) this.victoryCamera(dt);
     else if (spec) this.spectateCamera(spec, dt);
     else if (inPlane) this.planeCamera(dt);
     else if (dead) this.deathCamera(dt);
     else if (myVeh) this.rideCamera(dt, myVeh);
+    else if (dancing) this.danceCamera(dt);
     else this.firstPersonCamera(dt);
     if (!myVeh) this.rideOn = false;
     else if (p.seat !== this.rideSeatAt) { this.rideSeatAt = p.seat; this.rideAt = performance.now(); }
     // climbing in / out / swapping the view: the camera travels there (0.38 s) instead of cutting
-    this.blendCamera(dt, victory || spec || inPlane || dead || this.caster ? -1 : myVeh ? (p.seat === 0 && this.rideThird ? 1 : 2 + p.seat) : 0);
+    this.blendCamera(dt, victory || spec || inPlane || dead || dancing || this.caster ? -1 : myVeh ? (p.seat === 0 && this.rideThird ? 1 : 2 + p.seat) : 0);
     // the local door gunner holds TOP BANANA under its camera (actors/heli-tripo.ts gunnerView): after the camera is final
     if (myVeh && myVeh.kind === VKind.Heli) (this.tuks.get(myVeh.id) as (TukView & { gunnerView?(c: THREE.Camera | null): void }) | undefined)?.gunnerView?.(p.seat === HELI.GUN_SEAT && !dead ? this.engine.camera : null);
     this.dropCamera(dt, inPlane || dead || victory || !!spec || !!myVeh || !!this.caster);
@@ -1298,6 +1552,13 @@ export class GameRender implements EventSink {
       // at the bars, seen from behind: my own kong drives
       if (!this.meActor && !this.meActorPending) { this.meActorPending = true; void this.kits.createKong(this.engine, { variant: Math.max(0, cm.me) % 6 }).then((a) => { this.meActor = a; a.setOutfit?.(outfitForPlayer(cm.me, cm.seed, true)); a.setVisible(false); this.engine.scene.add(a.object); patchTree(this.engine, a.object); }); }
       if (this.meActor) { const mp = this.mePose; this.seatPose(mp, myVeh, 0, myVeh.yaw + myVeh.oyaw, 0); mp.weapon = null; mp.team = p.team; mp.friendly = true; mp.crouch = false; mp.sprint = false; this.meActor.setVisible(true); this.meActor.apply(mp, dt); }
+    } else if (dancing) {
+      if (this.meActor) {
+        cm.localPose(V3);
+        const mp = this.mePose; mp.x = V3.x; mp.y = V3.y; mp.z = V3.z; mp.yaw = this.danceBodyYaw; mp.pitch = 0; mp.vx = mp.vy = mp.vz = 0;
+        mp.state = "emote"; mp.emote = this.dancingId; mp.weapon = null; mp.crouch = false; mp.sprint = false; mp.team = p.team; mp.friendly = true;
+        this.meActor.setVisible(true); this.meActor.apply(mp, dt);
+      }
     } else if (this.meActor && !victory) this.meActor.setVisible(false);
     // scope (the only zoom in the game)
     const scoped = p.scoped && !spec;
@@ -1356,7 +1617,7 @@ export class GameRender implements EventSink {
     // a banana bomb in hand: the throwing hand comes up, the gun goes down
     const bombHand = this.bombFx.firstPerson(!victory && !spec && !dead ? p.cookT : 0, dt, t, p.cookKind === 1);
     const casterHands = this.caster?.hands?.() ?? null;
-    this.kits.viewModel.object.visible = casterHands ? true : !victory && !spec && !inPlane && !dead && !atBars && !gunner && !bombHand;   // (both fists are on the bars / the gun's grips)
+    this.kits.viewModel.object.visible = casterHands ? true : !victory && !spec && !inPlane && !dead && !atBars && !gunner && !bombHand && !dancing;   // (both fists are on the bars / the gun's grips / dancing in 3P)
     // swimming: the gun stowed (the sim's swim gun timer) → both hands swim
     const swimHands = !victory && !spec && !dead && p.st === PS.Ground && p.swim && (p.under || p.swGun <= 0) && SWIM_DEV.hands;
     { const vm = this.kits.viewModel as ViewModel & Partial<AirHands>;
@@ -1899,7 +2160,7 @@ export class GameRender implements EventSink {
     const kyaw = sd && Math.hypot(sd.x, sd.z) > 0.05 ? Math.atan2(-sd.x, -sd.z) : this.input.yaw;
     if (this.meActor) {
       const mp = this.mePose; mp.x = V3.x; mp.y = V3.y; mp.z = V3.z; mp.yaw = kyaw; mp.pitch = 0.2; mp.vx = mp.vy = mp.vz = 0;
-      mp.state = "emote"; mp.weapon = null; mp.team = cm.pred.team; mp.friendly = true;
+      mp.state = "emote"; mp.emote = this.lastDanceId; mp.weapon = null; mp.team = cm.pred.team; mp.friendly = true;
       this.meActor.setVisible(true); this.meActor.apply(mp, dt);
     }
     // the front arc the camera sways across must be open: pick the azimuth (nearest the sun-lit front) with the most room
@@ -2402,7 +2663,13 @@ export class GameRender implements EventSink {
       const pose = a.pose;
       pose.x = r.x; pose.y = r.y; pose.z = r.z; pose.yaw = r.yaw; pose.pitch = r.pitch; pose.vx = r.vx; pose.vy = r.vy; pose.vz = r.vz;
       if (r.id === sid) { pose.x += so.ox; pose.y += so.oy; pose.z += so.oz; }
-      pose.state = stateOf(r); pose.crouch = r.crouch; pose.sprint = r.sprint;
+      pose.state = stateOf(r); pose.crouch = r.crouch; pose.sprint = r.sprint; pose.emote = undefined;
+      const re = this.remoteEmotes.get(r.id);
+      if (re) {
+        if (r.st === PS.Ground && r.grounded && !r.swim && Math.hypot(r.vx, r.vz) < 0.75 && !(r.anim & 12)) {
+          pose.state = "emote"; pose.emote = re.id;
+        } else this.remoteEmotes.delete(r.id);
+      }
       // a kong on the surface rides the swell (the sim floats it at a fixed line; the drawn sea heaves ±0.3 m), fading
       // out over its first 0.6 m of a dive
       if (r.swim && r.st === PS.Ground) { const k = Math.min(1, Math.max(0, (r.y - (SWIM_FLOAT_Y - 0.6)) / 0.6)); if (k > 0) pose.y += k * (this.waterApi()?.surfaceAt(r.x, r.z, this.engine.time) ?? 0); }
@@ -2414,7 +2681,7 @@ export class GameRender implements EventSink {
       // (a helicopter's door gunner has its own guns holstered: both fists are on the minigun)
       const gunning = r.st === PS.Ride && r.seat === HELI.GUN_SEAT && r.veh >= 0 && cm.vehicles[r.veh]?.kind === VKind.Heli;
       // (swimming: a stowed gun rides as HELD_STOWED — both arms stroke)
-      pose.weapon = !gunning && r.held < 0x80 && r.held !== 0xff && !(r.held & HELD_STOWED) ? WEAPONS[r.held & 7] ?? null : null;
+      pose.weapon = pose.state !== "emote" && !gunning && r.held < 0x80 && r.held !== 0xff && !(r.held & HELD_STOWED) ? WEAPONS[r.held & 7] ?? null : null;
       pose.fired = (r.anim & 8) !== 0 || performance.now() - a.lastFire < 90;
       pose.reloading = (r.anim & 1) !== 0; pose.hurt = (r.anim & 4) !== 0;
       pose.team = r.team; pose.friendly = r.team === cm.pred.team;
@@ -2773,10 +3040,16 @@ export class GameRender implements EventSink {
       tg.state = dead ? "redeploy" : r.st === PS.Freefall || r.st === PS.Glide ? "air" : "alive"; tg.hp = r.hp; tg.shield = r.shield;
     }
     mates.length = mn; h.mates = mates;
+    this.projectPings(cam0, V3);
+    if (this.dancingId >= 0) {
+      const def = EMOTES[this.dancingId];
+      this.emoteHudObj.name = def.name; this.emoteHudObj.color = def.color; this.emoteHudObj.key = bindingText("emote", 0).toUpperCase() || "H";
+      h.emote = this.emoteHudObj;
+    } else h.emote = null;
     // hands
     const slot = p.slots[p.active];
     // (a helicopter's door gunner has its own guns holstered: the TOP BANANA panel instead — h.gun above)
-    const handsVisible = (weaponHudEligible(p.st) || (p.st === PS.Ride && p.seat !== 0 && !gunOf(cm.vehs, p))) && !cm.viewTarget();
+    const handsVisible = this.dancingId < 0 && (weaponHudEligible(p.st) || (p.st === PS.Ride && p.seat !== 0 && !gunOf(cm.vehs, p))) && !cm.viewTarget();
     h.handsVisible = handsVisible;
     if (handsVisible && slot.kind === SK.Weapon) { const w = WEAPON_DEFS[weaponId(slot.id)]; h.ammo ??= { mag: 0, reserve: 0 }; h.ammo.mag = slot.mag; h.ammo.reserve = p.ammo[["light", "heavy", "shells", "rockets"].indexOf(w.ammo)]; } else h.ammo = null;
     for (let i = 0; i < 5; i++) { const sl = p.slots[i], hs = h.hotbar[i]; hs.kind = sl.kind === SK.Weapon ? "weapon" : sl.kind === SK.Consumable ? "consumable" : "empty"; hs.id = sl.kind === SK.Weapon ? weaponId(sl.id) : sl.kind === SK.Consumable ? consumableId(sl.id) : null; hs.rarity = rarityOf(sl.rarity); hs.count = sl.kind === SK.Weapon ? sl.mag : sl.count; hs.name = sl.kind === SK.Weapon ? mythicOf(sl.rarity)?.name : undefined; hs.color = sl.kind === SK.Weapon ? mythicOf(sl.rarity)?.color : undefined; }
@@ -3002,7 +3275,7 @@ interface PendingPellet { victim: number; dmg: number; at: number; confirmed: bo
 /** pa = predicted damage not yet confirmed, ca = confirmed damage; drawn as ONE number (grey until the first confirm) */
 interface DmgWorld { at: number; last: number; x: number; y: number; z: number; pa: number; ca: number; kind: "body" | "head" | "shield" | "break" | "kill"; target: number }
 const SHOT = makeShotResult();
-const RHIT = makeHit(), PING_HIT = makeHit();
+const RHIT = makeHit();
 const SDIR = new Float64Array(3);
 const KRANK = { body: 0, shield: 1, head: 2, break: 3, kill: 4 } as const;
 const rankKind = (a: DmgWorld["kind"], b: DmgWorld["kind"]) => (KRANK[b] > KRANK[a] ? b : a);

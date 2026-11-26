@@ -263,6 +263,16 @@ export class OfflineLink implements Link {
         this.timer = setInterval(() => this.pump(), 8) as unknown as number;
         break;
       }
+      case "mark": {
+        if (!this.match) break;
+        const mk = m as { clear?: boolean; x?: number; z?: number; kind?: string };
+        if (mk.clear === true) this.match.setTeamPing(0, null);
+        else if (typeof mk.x === "number" && typeof mk.z === "number" && Number.isFinite(mk.x) && Number.isFinite(mk.z)) {
+          this.match.setTeamPing(0, mk.x, mk.z, typeof mk.kind === "string" ? mk.kind : "move");
+        }
+        break;
+      }
+      case "emote": break;
       case "leave": this.close(); break;
     }
   }

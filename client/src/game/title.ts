@@ -31,8 +31,8 @@ export interface TitleScene {
   spin(deltaRad: number): void;
   /** ease the hero kong smoothly back to its default front pose */
   resetSpin(): void;
-  /** play the hero's celebration emote on demand */
-  triggerEmote(): void;
+  /** play one of the Fortnite-style dances (0..5) on demand; -1 stops; omitted cycles */
+  triggerEmote(id?: number): number;
 }
 export interface TitleKits {
   createKong: (ctx: Engine, o?: { variant?: number; lod?: "hi" | "lo" }) => Promise<KongActor>;
@@ -61,7 +61,7 @@ export function createTitleScene(engine: Engine, plane: PlaneProps, kits: TitleK
     const p = loadPlayerOutfit();
     return p.mode === "custom" ? { hat: p.hat, top: p.top, shorts: p.shorts } : outfitFor(0, 77);
   })();
-  let spinTarget = 0, spinCur = 0, emoteUntil = -1;
+  let spinTarget = 0, spinCur = 0, emoteUntil = -1, danceIdx = -1, danceCycle = 0;
   const heroPose: KongPose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vy: 0, vz: 0, state: "idle", crouch: false, sprint: false, weapon: "ar", fired: false, reloading: false, hurt: false, team: 0, friendly: false };
   void kits.createKong(engine, { variant: 0, lod: "hi" }).then((a) => {
     hero = a; group.add(a.object);
@@ -161,11 +161,17 @@ export function createTitleScene(engine: Engine, plane: PlaneProps, kits: TitleK
     // warm-up ran. A kong that was not drawn comes back at its tier at once.
     get freeze() { return frozen; },
     set freeze(v: boolean) { frozen = v; hero?.setVisible(!v); },
-    setVisible(v: boolean) { visible = v; group.visible = v; if (!v) { plane.object.visible = false; setDraw(false); } },
+    setVisible(v: boolean) { visible = v; group.visible = v; if (!v) { emoteUntil = -1; danceIdx = -1; plane.object.visible = false; setDraw(false); } },
     setOutfit(o: KongOutfit | null) { pendingOutfit = o; hero?.setOutfit?.(o); layerTick = 0; },
     spin(deltaRad: number) { spinTarget += deltaRad; },
     resetSpin() { spinTarget = 0; },
-    triggerEmote() { emoteUntil = t0 + 3.2; },
+    triggerEmote(id?: number) {
+      if (id === -1) { emoteUntil = -1; danceIdx = -1; return -1; }
+      const pick = typeof id === "number" && id >= 0 && id < 6 ? id : (danceCycle++ % 6);
+      danceIdx = pick;
+      emoteUntil = t0 + 9.0;
+      return pick;
+    },
     update(dt: number) {
       if (!visible || this.freeze) { setDraw(false); return; }
       // (before the game is ready the boot prewarm draws the real scene from this camera: the override waits for ready)
@@ -189,7 +195,10 @@ export function createTitleScene(engine: Engine, plane: PlaneProps, kits: TitleK
         // face the camera, turned a touch toward the menu (the kong's forward is −Z of its yaw) + wardrobe spin
         heroPose.yaw = Math.atan2(-(CAM.x - hx), -(CAM.z - hz)) + F.turn + spinCur + Math.sin(t0 * 0.3) * 0.04;
         heroPose.pitch = F.pitch;
-        heroPose.state = t0 < emoteUntil || (t0 % 16) > 12.6 ? "emote" : "idle";
+        const manual = t0 < emoteUntil && danceIdx >= 0;
+        const idleDance = !manual && (t0 % 16) > 12.6;
+        heroPose.state = manual || idleDance ? "emote" : "idle";
+        heroPose.emote = manual ? danceIdx : undefined;
         hero.apply(heroPose, dt);
       }
       plane.object.visible = false;
