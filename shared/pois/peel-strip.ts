@@ -6,7 +6,7 @@
 // the door) with a lean-to shed, fuel drums, a windsock mast and a crashed old transport in the grass past the far
 // end of the runway. World metres; conventions in coast-kit.ts.
 import type { Box } from "../world/colliders";
-import { POIS } from "../world/map";
+import { poiById } from "../world/map";
 import { vegTrunkColliders, VARIANTS } from "../world/veg-scatter"; // only CALLED lazily (import cycle — see coast-kit lazyBoxes)
 import { interiorColliders, interiorLoot, type InteriorRoom } from "./interior-kit";
 import { panes, settleLoot } from "./pane-kit";
@@ -15,7 +15,7 @@ import * as dmath from "../sim/dmath";
 
 export const PAD = { x: -470, z: -40, y: 14 };
 /** the map's pad circle (flat terrain at PAD.y inside `pad`) */
-const POIS_PAD = POIS.find((p) => p.id === "peel-strip")!;
+const POIS_PAD = poiById("peel-strip");
 const D2R = Math.PI / 180;
 
 // ------------------------------------------------------------------------------------------------ strip frame

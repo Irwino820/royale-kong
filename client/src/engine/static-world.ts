@@ -9,6 +9,7 @@ import type { Climb } from "../../../shared/sim/climb";
 import type { SpotSet } from "../../../shared/sim/loot-spots";
 import { assetUrl } from "./assets";
 import { flag } from "../flags";
+import { activeMapId, activeMapInfo } from "../../../shared/world/maps";
 
 interface WorkerResult { ok: boolean; boxes?: Box[]; hash?: number; climbs?: Climb[]; terrainHash?: number; ms?: number; error?: string }
 export interface SpotsWorkerResult { ok: boolean; hash?: number; set?: SpotSet; worldMs?: number; spotsMs?: number; error?: string }
@@ -35,7 +36,7 @@ export function startStaticWorld() {
       else { resK(null); resW(d); resS?.(d); w.terminate(); }
     };
     w.onerror = (e) => { const err = { ok: false, error: String(e.message || e) }; resK(null); resW(err); resS?.(err); w.terminate(); };
-    w.postMessage({ url: new URL(assetUrl("assets/terrain/island.bin"), location.href).href, spots: wantSpots });
+    w.postMessage({ url: new URL(assetUrl(activeMapInfo().terrainBin), location.href).href, mapId: activeMapId(), spots: wantSpots });
   } catch (e) {
     const err = { ok: false, error: String(e) };
     resK(null); resW(err); resS?.(err);

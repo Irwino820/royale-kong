@@ -152,7 +152,10 @@ const mod: WorldModule = {
       sunDir.copy(state.sunDir);
     };
     let fieldId = "";
-    rebuildField = () => { fieldId = state.preset.id; clouds.build(cloudField(state.preset.id, liveCams)); };
+    const cloudPreset = (id: PresetId): "midday" | "jungle" | "dawn" | "night" | "rain" => (
+      id === "desert" ? "midday" : id === "sunset" ? "dawn" : id === "sandstorm" ? "rain" : id
+    );
+    rebuildField = () => { fieldId = state.preset.id; clouds.build(cloudField(cloudPreset(state.preset.id), liveCams)); };
     const applyAll = () => {
       const p = state.preset;
       if (p.id !== fieldId) rebuildField!(); // dawn has its own composed sky
@@ -293,7 +296,7 @@ const mod: WorldModule = {
   },
 
   stage(_ctx: WorldCtx, stage: string) {
-    if (stage === "dawn" || stage === "night" || stage === "rain" || stage === "jungle") api?.setPreset(stage);
+    if (stage === "dawn" || stage === "night" || stage === "rain" || stage === "jungle" || stage === "desert" || stage === "sunset" || stage === "sandstorm") api?.setPreset(stage);
   },
 };
 export default mod;

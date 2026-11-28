@@ -28,6 +28,19 @@ export const MYTHICS: readonly MythicDef[] = [
   { poi: "the-wreck",      weapon: "pistol",  name: "DAVY'S PEELER",    color: "#4a86ea" },
   { poi: "coco-caves",     weapon: "shotgun", name: "STALACTITE",       color: "#a9b8cc" },
   { poi: "wreck-bay",      weapon: "rocket",  name: "BAY BOOMER",       color: "#ff8840" },
+  // Sunburst Canyon signature Desert Mythics (indices 16..27)
+  { poi: "banana-pyramid",  weapon: "ar",      name: "PHARAOH'S PEEL",   color: "#ffd43b" },
+  { poi: "emerald-oasis",   weapon: "smg",     name: "OASIS MIRAGE",     color: "#22e3cc" },
+  { poi: "sunburst-bazaar", weapon: "shotgun", name: "SOUK BREAKER",     color: "#f26430" },
+  { poi: "redrock-canyon",  weapon: "bow",     name: "CANYON HAWK",      color: "#ff5733" },
+  { poi: "mesa-citadel",    weapon: "sniper",  name: "MESA LONGBOLT",    color: "#e67e22" },
+  { poi: "dune-refinery",   weapon: "minigun", name: "OIL GUSHER",       color: "#f59e0b" },
+  { poi: "skyship-wreck",   weapon: "rocket",  name: "ZEPPELIN SALVO",   color: "#ef4444" },
+  { poi: "cactus-gulch",    weapon: "pistol",  name: "DESERT OUTLAW",    color: "#84cc16" },
+  { poi: "solar-spire",     weapon: "sniper",  name: "HELIOS BEAM",      color: "#38bdf8" },
+  { poi: "mirage-docks",    weapon: "smg",     name: "SAND SQUALL",      color: "#14b8a6" },
+  { poi: "scorpion-arch",   weapon: "shotgun", name: "SCORPION STING",   color: "#d946ef" },
+  { poi: "bone-ridge",      weapon: "ar",      name: "FOSSIL FANG",      color: "#fef08a" },
 ];
 /** the rarity tier index of "mythic" (RARITIES[5]); rarity bytes MYTHIC_R + k are mythic k */
 export const MYTHIC_R = 5;

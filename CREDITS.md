@@ -42,8 +42,10 @@ generated with ElevenLabs. Custom 3D-style item and emote icons (`public/assets/
 `public/assets/ui/icons/airstrike.webp`, `public/assets/ui/icons/smoke-bomb.webp`,
 `public/assets/ui/icons/emote-floss.webp`, `public/assets/ui/icons/emote-take-l.webp`,
 `public/assets/ui/icons/emote-boogie.webp`, `public/assets/ui/icons/emote-justice.webp`,
-`public/assets/ui/icons/emote-kongbot.webp`, `public/assets/ui/icons/emote-crown.webp`) are original project assets
-generated with AI image tools. These are part of the game's own assets and are covered by the MIT licence.
+`public/assets/ui/icons/emote-kongbot.webp`, `public/assets/ui/icons/emote-crown.webp`), the Sunburst Canyon
+baked terrain binary (`public/assets/terrain/sunburst.bin`), and the tropical jungle lobby soundtrack
+(`public/assets/audio/kr/music/lobby-jungle.ogg`, `public/assets/audio/kr/music/lobby-jungle.m4a`) are original project assets
+generated for Kong Royale. These are part of the game's own assets and are covered by the MIT licence.
 
 ## Not affiliated
 

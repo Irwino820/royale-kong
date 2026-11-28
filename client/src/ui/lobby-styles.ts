@@ -49,6 +49,8 @@ const CSS = `
 .kr-lobby .tn-play-link:active { transform: translateY(${T(3)}); box-shadow: var(--kong-drop-pressed); transition-duration: 60ms; top: 0; }
 .kr-lobby .tn-play-link:disabled { background: var(--kong-disabled); color: var(--kong-disabled-text); transform: none; box-shadow: var(--kong-drop-pill); cursor: default; opacity: 1; filter: none; }
 .kr-lobby .tn-play-link--sm { font-size: ${T(15)}; line-height: ${T(23)}; letter-spacing: .16em; gap: ${T(10)}; }
+.kr-lobby .tn-play-music { position: absolute; right: ${T(65)}; bottom: ${T(44)}; top: auto; z-index: 3; }
+.kr-lobby .tn-play-music.is-muted { opacity: .72; color: var(--kong-text-muted); }
 .kr-lobby details[open] > .tn-play-link { background: var(--kong-surface-raised); color: var(--kong-accent); }
 .tn-play-link:focus-visible, .tn-play-cta:focus-visible, .tn-play-tile:focus-visible, .tn-play-input:focus-visible, .tn-play-foot .kr-fs-btn:focus-visible {
   outline: var(--kong-focus-width) solid var(--kong-focus); outline-offset: var(--kong-focus-offset); }
@@ -89,7 +91,7 @@ const CSS = `
 .tn-play-toast.on { opacity: 1; transform: none; }
 
 /* ---------------- left column */
-.tn-play-main { position: absolute; left: ${T(84)}; top: ${T(228)}; width: ${T(560)}; z-index: 2; }
+.tn-play-main { position: absolute; left: ${T(84)}; top: ${T(196)}; width: ${T(560)}; z-index: 2; }
 .tn-play-sec-training, .tn-play-sec-wardrobe { display: none; }
 .tn-play[data-tab="training"] .tn-play-sec-play { display: none; }
 .tn-play[data-tab="training"] .tn-play-sec-training { display: block; }
@@ -106,7 +108,28 @@ const CSS = `
 .tn-play-modeline { margin: ${T(26)} 0 0; font-weight: 700; font-size: ${T(18)}; line-height: ${T(27)}; letter-spacing: .22em; text-transform: uppercase; color: var(--kong-text-muted); white-space: nowrap; }
 .tn-play-modeline b { font-weight: inherit; color: inherit; }
 .tn-play[data-ui="room"] .tn-play-modeline b { font-weight: 800; color: var(--kong-text); }
-.tn-play-choices { display: flex; align-items: center; gap: ${T(24)}; margin-top: ${T(36)}; min-height: ${T(60)}; }
+.tn-play-choices { display: flex; align-items: center; gap: ${T(24)}; margin-top: ${T(22)}; min-height: ${T(60)}; }
+/* ---- Map Selector Cards (Kong Island / Sunburst Canyon) */
+.tn-map-picker { display: grid; grid-template-columns: 1fr 1fr; gap: ${T(14)}; margin-top: ${T(22)}; width: ${T(512)}; }
+.tn-play[data-ui="room"] .tn-map-picker, .tn-play[data-ui="invite"] .tn-map-picker { display: none; }
+.tn-map-card { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: ${T(96)}; padding: ${T(10)} ${T(14)}; box-sizing: border-box;
+  overflow: hidden; text-align: left; cursor: pointer; background: var(--kong-surface);
+  border: var(--kong-outline-sm) solid var(--kong-outline); border-radius: ${T(16)}; box-shadow: 0 ${T(4)} 0 var(--kong-outline);
+  transition: transform var(--kong-motion-fast) var(--kong-ease-spring), box-shadow var(--kong-motion-fast), border-color var(--kong-motion-fast); }
+.tn-map-card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; transition: transform .25s ease; }
+.tn-map-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,16,28,.12) 0%, rgba(10,16,28,.82) 100%); pointer-events: none; }
+.tn-map-card:hover { transform: translateY(${T(-3)}); box-shadow: 0 ${T(7)} 0 var(--kong-outline); }
+.tn-map-card:hover img { transform: scale(1.06); }
+.tn-map-card.is-on { border-color: #ffd400; box-shadow: 0 ${T(4)} 0 var(--kong-outline), 0 0 0 ${T(2)} #ffd400; }
+.tn-map-card .mp-tag { position: absolute; top: ${T(8)}; right: ${T(8)}; z-index: 2; padding: ${T(2)} ${T(8)}; border-radius: 999px;
+  font-weight: 900; font-size: ${T(11)}; letter-spacing: .12em; text-transform: uppercase;
+  background: rgba(10,16,28,.75); color: rgba(255,255,255,.78); border: 1.5px solid rgba(255,255,255,.22); }
+.tn-map-card.is-on .mp-tag { background: #ffd400; color: #17120a; border-color: #17120a; }
+.tn-map-card .mp-name { position: relative; z-index: 2; font-family: var(--kong-font-display); font-size: ${T(20)}; line-height: 1.05; letter-spacing: .04em;
+  text-transform: uppercase; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.85); }
+.tn-map-card .mp-sub { position: relative; z-index: 2; font-weight: 700; font-size: ${T(11)}; letter-spacing: .06em; color: rgba(255,244,218,.86);
+  text-shadow: 0 1px 4px rgba(0,0,0,.85); margin-top: ${T(2)}; }
+.tn-map-card:disabled { opacity: .65; cursor: default; transform: none; }
 .tn-play-modes { display: flex; gap: ${T(10)}; }
 .tn-play-modes .tn-pill { font-size: ${T(22)}; line-height: ${T(33)}; padding: ${T(10)} ${T(26)}; letter-spacing: .12em; text-transform: none; }
 .tn-play-bots { display: flex; align-items: center; gap: ${T(10)}; }
@@ -119,17 +142,17 @@ const CSS = `
 /* locked while connecting: the chosen pill keeps ivory text on the flat disabled fill, the others stay muted */
 .tn-play-bots .tn-seg button.is-on[disabled] { background: var(--kong-disabled); color: var(--kong-text); }
 .tn-play .tn-pill.is-on[disabled] { color: var(--kong-text); }
-.tn-play-cta { margin-top: ${T(28)}; }
+.tn-play-cta { margin-top: ${T(22)}; }
 .tn-play-err { display: flex; align-items: flex-start; gap: ${T(10)}; margin-top: ${T(18)}; max-width: ${T(560)};
   font-weight: 800; font-size: var(--kong-fs-support); line-height: var(--kong-lh-support); color: var(--kong-danger); }
 .tn-play-err .tn-play-ico { width: ${T(22)}; height: ${T(22)}; }
-.tn-play-live { display: flex; align-items: center; gap: ${T(12)}; margin-top: ${T(22)}; white-space: nowrap;
+.tn-play-live { display: flex; align-items: center; gap: ${T(12)}; margin-top: ${T(18)}; white-space: nowrap;
   font-weight: 700; font-size: ${T(15)}; line-height: ${T(23)}; letter-spacing: .2em; text-transform: uppercase; color: var(--kong-text-muted); }
 .tn-play-live i { flex: none; width: ${T(10)}; height: ${T(10)}; border-radius: 50%; background: var(--kong-success); }
 .tn-play-live.is-off i { background: var(--kong-text-faint); }
 .tn-play-live b { font-weight: 800; color: var(--kong-text); }
 .tn-play-live .sep { letter-spacing: 0; }
-.tn-play-links { display: flex; gap: ${T(12)}; margin-top: ${T(58)}; }
+.tn-play-links { display: flex; gap: ${T(12)}; margin-top: ${T(32)}; }
 
 /* the one primary: the big yellow Play (512×80, Lilita 38 with the 5px dark outline) */
 .kr-lobby .tn-play-cta { position: relative; top: 0; display: flex; align-items: center; justify-content: space-between; gap: ${T(24)};
@@ -159,7 +182,7 @@ html.kr-calm .tn-play-spin { animation: none; }
 /* ---------------- the playtest title (ui/title-flags.ts → data-playtest): one Play, room to breathe —
    no Trios / Solo, no bot difficulty, no Friends popover (an invite link / private room still shows its own controls) */
 .tn-play[data-playtest][data-ui="home"] .tn-play-choices { display: none; }
-.tn-play[data-playtest][data-ui="home"] .tn-play-cta { margin-top: ${T(48)}; }
+.tn-play[data-playtest][data-ui="home"] .tn-play-cta { margin-top: ${T(24)}; }
 .tn-play[data-playtest] .tn-play-pop[hidden] { display: none; }
 .tn-play[data-playtest] .tn-play-id > .tn-play-pop + .tn-play-pop { margin-left: 0; }
 

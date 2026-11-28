@@ -3,6 +3,7 @@
 // depth, faded along their length and toward their silhouettes (a volume, not a solid cone). Only while a preset asks
 // for them (night).
 import * as THREE from "three";
+import { isSunburst } from "../../../../shared/world/maps";
 
 const LEN = 150;
 const VERT = /* glsl */ `
@@ -55,10 +56,16 @@ export class NightBeam {
     // the lantern's position comes from the POI's shared layout, loaded LAZILY: a broken / in-progress POI file elsewhere
     // must never take the atmos module (the sky) down with it — no layout, no beam
     this.group.userData.krNoLayout = true;
-    import("../../../../shared/pois/lookout-point").then(({ LH }) => {
-      this.group.position.set(LH.x, LH.top + LH.roomWall + LH.glassH * 0.5, LH.z);
+    if (isSunburst()) {
+      // Mirage Docks desert lighthouse lantern room (610+22, 3.2+19.6, 420-22)
+      this.group.position.set(632, 22.8, 398);
       delete this.group.userData.krNoLayout;
-    }).catch((e) => console.warn("[atmos] night beam: no lighthouse layout", e));
+    } else {
+      import("../../../../shared/pois/lookout-point").then(({ LH }) => {
+        this.group.position.set(LH.x, LH.top + LH.roomWall + LH.glassH * 0.5, LH.z);
+        delete this.group.userData.krNoLayout;
+      }).catch((e) => console.warn("[atmos] night beam: no lighthouse layout", e));
+    }
     this.group.name = "atmos-nightbeam";
     this.group.visible = false;
     this.group.userData.castShadow = false; this.group.userData.farShadow = false;

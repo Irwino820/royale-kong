@@ -31,4 +31,8 @@ export const ICON = {
   dice: svg("0 0 24 24", `<g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/></g>`),
   /** emote sparkle */
   sparkle: svg("0 0 24 24", `<path fill="currentColor" d="M12 2l2.3 6.7L21 11l-6.7 2.3L12 20l-2.3-6.7L3 11l6.7-2.3z"/>`),
+  /** lobby music on (eighth notes) */
+  music: svg("0 0 24 24", `<g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5" fill="currentColor"/><circle cx="17.5" cy="16" r="2.5" fill="currentColor"/></g>`),
+  /** lobby music muted */
+  musicOff: svg("0 0 24 24", `<g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V9m3-3.6L20 4v10"/><circle cx="6.5" cy="18" r="2.5" fill="currentColor"/><path d="M3 3l18 18"/></g>`),
 } as const;

@@ -11,6 +11,7 @@
 import { resources, type Scope } from "../engine/res/scope";
 import { assetUrl } from "../engine/assets";
 import { flag } from "../flags";
+import { activeMapId, activeMapInfo, type MapId } from "../../../shared/world/maps";
 import { packLog, type ReplayEvent, type ReplayLog, type ReplayOpts } from "../../../shared/net/replay";
 import type { BotDifficulty } from "../ui/api";
 import type { Link } from "./net";
@@ -21,7 +22,7 @@ export type OutItem = [0, Record<string, unknown>] | [1, Uint8Array, number | un
 /** what the match's replay recorder logged since the last message (opts once, when recording starts); null = stopped */
 export type RecPart = { opts?: ReplayOpts; events: ReplayEvent[]; ticks: number; warmupS: number; endAfterResults: boolean } | null;
 export type ToHost =
-  | { k: "build"; url: string }
+  | { k: "build"; url: string; mapId?: MapId }
   | { k: "open"; sid: number; name: string; botDamageToHumans: number; botAimRange: number; range: boolean; difficulty: BotDifficulty; seed: number; streamed: boolean; record: boolean }
   | { k: "json"; sid: number; o: unknown }
   | { k: "bin"; sid: number; buf: ArrayBuffer }
@@ -82,7 +83,7 @@ export function startHostWorker(worldHash: number) {
       resolve(hw);
     };
     w.onerror = (e) => { if (hw) hw.fail(String(e.message || e)); else give(String(e.message || e)); };
-    const build: ToHost = { k: "build", url: new URL(assetUrl("assets/terrain/island.bin"), location.href).href };
+    const build: ToHost = { k: "build", url: new URL(assetUrl(activeMapInfo().terrainBin), location.href).href, mapId: activeMapId() };
     w.postMessage(build);
   });
 }

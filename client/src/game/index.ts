@@ -5,6 +5,7 @@ import type { Engine } from "../engine/engine";
 import type { CamSpec } from "../engine/views";
 import type { WorldModule } from "../world/module";
 import { CONSUMABLES, POIS, RARITIES, WEAPONS, type ConsumableId, type WeaponId } from "../../../shared/world/map";
+import { isSunburst } from "../../../shared/world/maps";
 import { staticWorld } from "../engine/static-world";
 import { adoptWorkerLootSpots } from "../engine/lootspots";
 import { hostWorker, startHostWorker } from "./host-worker";
@@ -19,6 +20,7 @@ import { createWeaponsKit } from "../weapons/index";
 import type { Fx } from "../weapons/api";
 import { createAudio } from "../audio/index";
 import { EmoteMusic } from "../audio/emote-music";
+import { LobbyMusic } from "../audio/lobby-music";
 import { isDanceId } from "../actors/emotes";
 import { createKong, kongManager } from "../actors/kong";
 import type { KongActor, KongPose } from "../actors/api";
@@ -197,6 +199,7 @@ export async function startGame(engine: Engine, boot: GameBoot) {
   let titleRef: ReturnType<typeof createTitleScene> | null = null;
   const lobbyMusic = new EmoteMusic(() => (audio as { ctx?: BaseAudioContext }).ctx ?? null);
   let lobbyMusicUntil = 0;
+  const lobbyTheme = new LobbyMusic(flag("caster") === null && flag("cast") === null);
   const actions: LobbyActions = {
     skipCoach() { coach.skip(); },
     replayCoach() { coach.replay(); coachObserver.reset(); },
@@ -216,8 +219,8 @@ export async function startGame(engine: Engine, boot: GameBoot) {
     emoteHero(id) {
       const picked = titleRef?.triggerEmote(id) ?? -1;
       audio.play("ui:click", { volume: 0.45 });
-      if (isDanceId(picked)) { void audio.unlock(); lobbyMusic.start(picked, 0.85); lobbyMusicUntil = performance.now() + 9000; }
-      else { lobbyMusic.stop(); lobbyMusicUntil = 0; }
+      if (isDanceId(picked)) { void audio.unlock(); lobbyMusic.start(picked, 0.85); lobbyMusicUntil = performance.now() + 9000; lobbyTheme.setDucked(true); }
+      else { lobbyMusic.stop(); lobbyMusicUntil = 0; lobbyTheme.setDucked(false); }
     },
   };
   const lobby = eventCode !== null ? createEventLobby(actions, eventCode) : createLobby(actions);
@@ -803,17 +806,17 @@ export async function startGame(engine: Engine, boot: GameBoot) {
   const syncClickHint = () => { const on = inMatch && !device.pad && !input.locked && !input.capturing && input.gameplayAllowed(); if (on !== clickHintOn) { clickHintOn = on; clickHint.style.display = on ? "block" : "none"; } };
 
   // ---- frame loop
-  const MATCH_WEATHERS = ["midday", "dawn", "night", "rain"] as const;
-  type MatchWeather = (typeof MATCH_WEATHERS)[number];
-  const weatherForSeed = (seed: number): MatchWeather => {
+  const MATCH_WEATHERS = (isSunburst() ? ["desert", "sunset", "sandstorm"] : ["midday", "dawn", "night", "rain"]) as readonly string[];
+  const DEFAULT_WEATHER = isSunburst() ? "desert" : "midday";
+  const weatherForSeed = (seed: number): string => {
     let h = (seed | 0) ^ 0x9e3779b9;
     h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
     h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
     return MATCH_WEATHERS[((h ^ (h >>> 16)) >>> 0) % MATCH_WEATHERS.length];
   };
-  let appliedWeatherSeed: number | null = null, lastOfflineWeather: MatchWeather | null = null;
+  let appliedWeatherSeed: number | null = null, lastOfflineWeather: string | null = null;
   const syncMatchWeather = () => {
-    const atmos = engine.shared.get("atmos") as { setPreset?(id: MatchWeather): void } | undefined;
+    const atmos = engine.shared.get("atmos") as { setPreset?(id: string): void } | undefined;
     if (!atmos?.setPreset) return;
     if (inMatch && cm && !cm.range) {
       if (appliedWeatherSeed === cm.seed) return;
@@ -830,7 +833,7 @@ export async function startGame(engine: Engine, boot: GameBoot) {
     }
     if (appliedWeatherSeed !== null) {
       appliedWeatherSeed = null;
-      atmos.setPreset("midday");
+      atmos.setPreset(DEFAULT_WEATHER);
     }
   };
   let wasWatching = false;
@@ -841,9 +844,10 @@ export async function startGame(engine: Engine, boot: GameBoot) {
     routePad(dt);
     syncMatchWeather();
     blimp.update(dt, t);
-    if (caster?.active) caster.update(dt, t);
+    if (caster?.active) { lobbyTheme.setActive(false); caster.update(dt, t); }
     else if (inMatch && cm && render) {
-      if (lobbyMusicUntil > 0) { lobbyMusic.stop(); lobbyMusicUntil = 0; }
+      lobbyTheme.setActive(false);
+      if (lobbyMusicUntil > 0) { lobbyMusic.stop(); lobbyMusicUntil = 0; lobbyTheme.setDucked(false); }
       // watching someone: the mouse is the cursor (a capture from the last life is let go once);
       // the player list closes when spectating ends
       const watching = spectating();
@@ -882,7 +886,9 @@ export async function startGame(engine: Engine, boot: GameBoot) {
       // During Warmup (phase 0), keep warming any light POIs / late textures at 1 upload/frame before the plane takes off
       if (warmReady && cm.phase === 0) warmer.tick();
     } else {
-      if (lobbyMusicUntil > 0 && performance.now() > lobbyMusicUntil) { lobbyMusic.stop(); lobbyMusicUntil = 0; }
+      if (lobbyMusicUntil > 0 && performance.now() > lobbyMusicUntil) { lobbyMusic.stop(); lobbyMusicUntil = 0; lobbyTheme.setDucked(false); }
+      lobbyTheme.setActive(!casterMode);
+      lobbyTheme.setDucked(lobbyMusicUntil > 0);
       coach.update({ active: false }); coachObserver.reset();
       title.update(dt, t);
       storm.update(dt, t, engine.camera);
@@ -929,7 +935,7 @@ export async function startGame(engine: Engine, boot: GameBoot) {
 
   // debug / test handle (tools drive the game through this)
   (window as unknown as { __kr: Record<string, unknown> }).__kr.game = {
-    input, lobby, hud, get cm() { return cm; }, get render() { return render; }, get link() { return link; }, get voice() { return voice; }, get inMatch() { return inMatch; },
+    input, lobby, hud, lobbyTheme, get cm() { return cm; }, get render() { return render; }, get link() { return link; }, get voice() { return voice; }, get inMatch() { return inMatch; },
     world,
     practice: (mode: Mode, difficulty?: BotDifficulty) => offline(mode, false, difficulty ?? botDifficulty), range: () => offline("solo", true), leave: leaveAll, actions, lobbyState: () => ({ ...lobbyState }), startNow: () => link?.sendJSON({ t: "start", mode: lobbyState.mode }),
     state: () => cm ? { phase: cm.phase, st: cm.pred.st, x: +cm.pred.x.toFixed(1), y: +cm.pred.y.toFixed(1), z: +cm.pred.z.toFixed(1), hp: cm.pred.hp, shield: cm.pred.shield, alive: cm.alive, squads: cm.squads, ping: Math.round(cm.ping), interp: +cm.interpTicks.toFixed(1), time: +cm.time.toFixed(1), storm: { ...cm.storm }, slots: cm.pred.slots.map((s) => `${s.kind}:${s.id}:${s.rarity}:${s.count}:${s.mag}`), active: cm.pred.active, kills: cm.pred.kills, actors: render?.actors.size, loot: render?.lootViews.size, chests: render?.chestViews.size, rejected: render?.rejected } : null,

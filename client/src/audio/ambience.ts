@@ -23,10 +23,10 @@ type Weights = Record<string, number>;
 
 // (Wreck Bay is not in the harbor list — it has its own galleon bed; the Murk, Canopy Line and Coco Caves are not in the
 // jungle / lagoon lists — each has its own soundscape below)
-const HARBOR: PoiId[] = ["peel-harbor", "the-wreck", "stilt-town"];
+const HARBOR: PoiId[] = ["peel-harbor", "the-wreck", "stilt-town", "mirage-docks"];
 // the towns have their own bed (awnings, sparrows, doves, a street breeze):
-// Mango Market and the Coconut Cove resort (its tiki-bar radio still plays)
-const TOWN: PoiId[] = ["mango-market", "coconut-cove"];
+// Mango Market and the Coconut Cove resort (its tiki-bar radio still plays), plus Sunburst Bazaar & Cactus Gulch
+const TOWN: PoiId[] = ["mango-market", "coconut-cove", "sunburst-bazaar", "cactus-gulch"];
 // POIs whose pads are paved/path but whose soul is the jungle around them (the temple, the falls, the lab, the canopy)
 const JUNGLE: PoiId[] = ["banana-temple", "mist-falls", "cnvs-lab"];
 // the newer POIs' own places (numbers from their layouts — kept here, not imported, so a POI module
@@ -35,7 +35,7 @@ const JUNGLE: PoiId[] = ["banana-temple", "mist-falls", "cnvs-lab"];
 const SHIP: V3 = [45, 6, -701];
 const CAVE = { x: -721, z: -318, r: 34, roof: 58, arch: [-770, 36, -316] as V3 };
 // open, windy high ground
-const WINDY: PoiId[] = ["lookout-point", "peel-strip"];
+const WINDY: PoiId[] = ["lookout-point", "peel-strip", "mesa-citadel", "redrock-canyon", "solar-spire", "bone-ridge", "scorpion-arch", "banana-pyramid"];
 
 export class Ambience {
   private beds = new Map<string, Bed>();
@@ -56,27 +56,48 @@ export class Ambience {
     // the same two shore emitters as a breaker-free WASH — where the surf sync voices every breaker on the
     // water's own phase (surf.ts), the recorded surf bed (with its own random crashes) crossfades to it
     for (let i = 0; i < 2; i++) this.surf.push({ group: "amb/surf-wash", pos: [0, 0, 0], h: null, cur: 0, target: 0, ref: 14, max: 140, db: AMB_DB["amb/surf-wash"], occ: 0 });
-    const falls = POIS.find((p) => p.id === "mist-falls")!, lab = POIS.find((p) => p.id === "cnvs-lab")!;
-    this.points.push({ group: "amb/waterfall", pos: [falls.x, 0, falls.z], h: null, cur: 0, target: 0, ref: 18, max: 260, db: AMB_DB["amb/waterfall"], occ: 0 });
-    this.points.push({ group: "amb/river", pos: [falls.x + 40, 0, falls.z + 60], h: null, cur: 0, target: 0, ref: 8, max: 90, db: AMB_DB["amb/river"], occ: 0 });
-    this.points.push({ group: "amb/lab", pos: [lab.x, 0, lab.z], h: null, cur: 0, target: 0, ref: 10, max: 80, db: AMB_DB["amb/lab"], occ: 0 });
-    // the server hall's rack rows (shared/pois/cnvs-lab.ts module A: u 6..28, v -7..7 from CX / CZ, floor F0 34.24): fans,
-    // transformer hum, relay ticks — loudest in the hall, through the walls ≥ 10 dB down outside
-    this.points.push({ group: "amb/lab", pos: [150.5 + 17, 34.24 + 1.6, -479.5], h: null, cur: 0, target: 0, ref: 7, max: 45, db: AMB_DB["amb/lab"] + 5, occ: 0, interior: true });
-    // porch wind chimes in the stilt village and at Coconut Cove; Mango Market's hang over the plaza
-    for (const id of ["stilt-town", "coconut-cove"] as PoiId[]) {
+    const falls = POIS.find((p) => p.id === "mist-falls"), lab = POIS.find((p) => p.id === "cnvs-lab");
+    if (falls) {
+      this.points.push({ group: "amb/waterfall", pos: [falls.x, 0, falls.z], h: null, cur: 0, target: 0, ref: 18, max: 260, db: AMB_DB["amb/waterfall"], occ: 0 });
+      this.points.push({ group: "amb/river", pos: [falls.x + 40, 0, falls.z + 60], h: null, cur: 0, target: 0, ref: 8, max: 90, db: AMB_DB["amb/river"], occ: 0 });
+    }
+    if (lab) {
+      this.points.push({ group: "amb/lab", pos: [lab.x, 0, lab.z], h: null, cur: 0, target: 0, ref: 10, max: 80, db: AMB_DB["amb/lab"], occ: 0 });
+      // the server hall's rack rows (shared/pois/cnvs-lab.ts module A: u 6..28, v -7..7 from CX / CZ, floor F0 34.24): fans,
+      // transformer hum, relay ticks — loudest in the hall, through the walls ≥ 10 dB down outside
+      this.points.push({ group: "amb/lab", pos: [150.5 + 17, 34.24 + 1.6, -479.5], h: null, cur: 0, target: 0, ref: 7, max: 45, db: AMB_DB["amb/lab"] + 5, occ: 0, interior: true });
+    }
+    // porch wind chimes in the stilt village and at Coconut Cove; Oasis shrine chimes on Sunburst Canyon
+    for (const id of ["stilt-town", "coconut-cove", "emerald-oasis"] as PoiId[]) {
       const q = POIS.find((p) => p.id === id);
       if (q) this.points.push({ group: "amb/chimes", pos: [q.x + 6, 0, q.z - 4], h: null, cur: 0, target: 0, ref: 5, max: 55, db: AMB_DB["amb/chimes"], occ: 0 });
     }
     // the market plaza (shared/pois/mango-market.ts FX/FZ): the fountain, the chimes on a stall, a stall radio; the
     // Coconut Cove tiki bar's radio (shared/pois/coconut-cove.ts TIKI)
-    this.points.push({ group: "amb/fountain", pos: [455, 0, -55], h: null, cur: 0, target: 0, ref: 6, max: 75, db: AMB_DB["amb/fountain"], occ: 0 });
-    this.points.push({ group: "amb/chimes", pos: [446, 0, -66], h: null, cur: 0, target: 0, ref: 5, max: 55, db: AMB_DB["amb/chimes"], occ: 0 });
-    this.points.push({ group: "amb/radio", pos: [468, 0, -45], h: null, cur: 0, target: 0, ref: 4, max: 60, db: AMB_DB["amb/radio"], occ: 0 });
-    this.points.push({ group: "amb/radio", pos: [66.7, 0, 441.4], h: null, cur: 0, target: 0, ref: 4, max: 60, db: AMB_DB["amb/radio"], occ: 0 });
+    if (POIS.some((p) => p.id === "mango-market")) {
+      this.points.push({ group: "amb/fountain", pos: [455, 0, -55], h: null, cur: 0, target: 0, ref: 6, max: 75, db: AMB_DB["amb/fountain"], occ: 0 });
+      this.points.push({ group: "amb/chimes", pos: [446, 0, -66], h: null, cur: 0, target: 0, ref: 5, max: 55, db: AMB_DB["amb/chimes"], occ: 0 });
+      this.points.push({ group: "amb/radio", pos: [468, 0, -45], h: null, cur: 0, target: 0, ref: 4, max: 60, db: AMB_DB["amb/radio"], occ: 0 });
+    }
+    if (POIS.some((p) => p.id === "coconut-cove")) {
+      this.points.push({ group: "amb/radio", pos: [66.7, 0, 441.4], h: null, cur: 0, target: 0, ref: 4, max: 60, db: AMB_DB["amb/radio"], occ: 0 });
+    }
     // the wrecked galleon — hull groans, the flooded hold, rigging — a place you hear from the beach and all
     // round you on board (full level within 16 m of midship)
-    this.points.push({ group: "amb/galleon", pos: [SHIP[0], SHIP[1], SHIP[2]], h: null, cur: 0, target: 0, ref: 16, max: 150, db: AMB_DB["amb/galleon"], occ: 0 });
+    if (POIS.some((p) => p.id === "wreck-bay")) {
+      this.points.push({ group: "amb/galleon", pos: [SHIP[0], SHIP[1], SHIP[2]], h: null, cur: 0, target: 0, ref: 16, max: 150, db: AMB_DB["amb/galleon"], occ: 0 });
+    }
+    // Sunburst Canyon desert point sources: Bazaar sandstone fountain + souk radio/chimes, Dune Refinery & Solar Spire hum
+    const bazaar = POIS.find((p) => p.id === "sunburst-bazaar");
+    if (bazaar) {
+      this.points.push({ group: "amb/fountain", pos: [bazaar.x, 0, bazaar.z], h: null, cur: 0, target: 0, ref: 6, max: 75, db: AMB_DB["amb/fountain"], occ: 0 });
+      this.points.push({ group: "amb/chimes", pos: [bazaar.x - 10, 0, bazaar.z + 10], h: null, cur: 0, target: 0, ref: 5, max: 55, db: AMB_DB["amb/chimes"], occ: 0 });
+      this.points.push({ group: "amb/radio", pos: [bazaar.x + 12, 0, bazaar.z - 8], h: null, cur: 0, target: 0, ref: 4, max: 60, db: AMB_DB["amb/radio"], occ: 0 });
+    }
+    for (const id of ["dune-refinery", "solar-spire"] as PoiId[]) {
+      const q = POIS.find((p) => p.id === id);
+      if (q) this.points.push({ group: "amb/lab", pos: [q.x, 0, q.z], h: null, cur: 0, target: 0, ref: 12, max: 95, db: AMB_DB["amb/lab"], occ: 0 });
+    }
     const S = (group: string, every: [number, number], weight: Sprinkle["weight"], db: number, place: Sprinkle["place"]): Sprinkle => ({ group, every, weight, db, place, next: every[0] * this.e.ambRnd() });
     this.sprinkles = [
       S("amb1/parrot", [4, 11], (w) => Math.max(w.jungle, w.canopy * 0.9), -7, "canopy"),
@@ -267,18 +288,20 @@ export class Ambience {
     const alt = smooth(18, 110, p.height);
     const ground = 1 - alt;
     const poi = (ids: PoiId[], inner = 0.5, outer = 1.25) => Math.max(0, ...ids.map((id) => {
-      const q = POIS.find((x) => x.id === id)!;
+      const q = POIS.find((x) => x.id === id);
+      if (!q) return 0;
       return 1 - smooth(q.r * inner, q.r * outer, Math.hypot(L[0] - q.x, L[2] - q.z));
     }));
     const seaD = p.sea.length ? Math.min(...p.sea.map((s) => s.dist)) : 1e9;
     const harbor = poi(HARBOR, 0.45, 1.2);
-    // THE MURK = a swamp (its own bed); the lagoon bed stays Stilt Town's
+    // THE MURK = a swamp (its own bed); the lagoon bed stays Stilt Town's (or Emerald Oasis on Sunburst Canyon)
     const swamp = poi(["the-murk"], 0.45, 1.15);
-    const lagoon = Math.max(p.lagoonNear * (1 - swamp), 0);
+    const lagoon = Math.max(p.lagoonNear * (1 - swamp), poi(["emerald-oasis"], 0.4, 1.15));
     // WRECK BAY: the galleon (a point source) and a sheltered cove — the surf there only laps
     const wreck = poi(["wreck-bay"], 0.4, 1.1);
     // COCO CAVES: inside the sea-cave hall (under its roof) — no sky, no birds, no surf on the beach, just the cave
-    const cave = (1 - smooth(CAVE.r - 6, CAVE.r + 8, Math.hypot(L[0] - CAVE.x, L[2] - CAVE.z))) * (1 - smooth(CAVE.roof - 4, CAVE.roof, L[1]));
+    const hasCave = POIS.some((x) => x.id === "coco-caves");
+    const cave = hasCave ? (1 - smooth(CAVE.r - 6, CAVE.r + 8, Math.hypot(L[0] - CAVE.x, L[2] - CAVE.z))) * (1 - smooth(CAVE.roof - 4, CAVE.roof, L[1])) : 0;
     // CANOPY LINE: the treetop network. On the forest floor the crowns still hiss overhead; up on the decks (≥ 6 m over the
     // ground, full at 15 m) the wind in the leaves and the creaking nets ARE the place and the jungle sinks below you
     const canopyP = poi(["canopy-line"], 0.5, 1.2);
@@ -294,8 +317,8 @@ export class Ambience {
       canopy: canopyP * ground * (1 - cave), canopyUp: canopyUp * ground,
       meadow: Math.min(1, p.open * 1.3) * ground * (1 - harbor * 0.8) * (1 - jungleP * 0.7) * (1 - town * 0.85) * (1 - cave) * (1 - 0.8 * swamp) * (1 - 0.8 * wreck) * (1 - 0.6 * canopyP),
       town: town * ground,
-      lab: poi(["cnvs-lab"], 0.35, 1.0) * ground,
-      cliff: poi(["lookout-point"], 0.35, 1.0) * ground,
+      lab: poi(["cnvs-lab", "dune-refinery", "solar-spire"], 0.35, 1.0) * ground,
+      cliff: poi(["lookout-point", "mesa-citadel", "redrock-canyon"], 0.35, 1.0) * ground,
       surf: (1 - smooth(25, 320, seaD)) * ground * (1 - 0.75 * wreck) * (1 - 0.85 * cave) * (1 - 0.6 * canopyUp),
       harbor: harbor * ground,
       lagoon: lagoon * ground,

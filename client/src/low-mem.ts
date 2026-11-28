@@ -3,6 +3,7 @@ import type { Poi } from "../../shared/world/map";
 import { Phase } from "../../shared/sim/match";
 import { PS } from "../../shared/sim/player";
 import type { Engine } from "./engine/engine";
+import { isSunburst } from "../../shared/world/maps";
 import type { StaticCache } from "./engine/static-cache";
 import type { WorldModule } from "./world/module";
 import { resources, type Scope } from "./engine/res/scope";
@@ -302,6 +303,7 @@ function decodeImpostor(buf: ArrayBuffer): THREE.BufferGeometry {
 }
 
 async function loadImpostors(engine: Engine, w: World, out: Map<string, THREE.Mesh>) {
+  if (isSunburst()) return;
   const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "") + "/assets/far/";
   const scope = resources.root.child("far-impostors");
   // (double-sided for base geometry because the bake merges leaf cards and cliff shells drawn DoubleSide at the POI;

@@ -21,6 +21,7 @@
 //            once more (the world is complete) and the far-POI proxies are built in idle frames.
 // KONGBOT first: its console / error capture must see the whole boot (bug reports, client/src/kongbot)
 import "./kongbot/capture";
+import "./world/active-map";
 import * as THREE from "three";
 import { Engine, type Quality } from "./engine/engine";
 import { DEFAULT_VIEWS, applyView, parseCam, type CamSpec } from "./engine/views";

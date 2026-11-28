@@ -8,6 +8,8 @@
 // range. Built once per world, picked per seed (like the taxis: shared/sim/tuk-spots.ts fleetSpots); the client paints a
 // pad decal on this match's spots (client/src/actors/helipad.ts).
 import { POIS, type PoiId } from "../world/map";
+import { isSunburst } from "../world/maps";
+import { SUNBURST_HELIPADS } from "../pois/sunburst/index";
 import * as islet from "../pois/lobby-islet";
 import { sw } from "../pois/peel-strip";
 import { RANGE_LINE_X, RANGE_YAW_DOWNRANGE } from "./range";
@@ -47,14 +49,21 @@ function build(world: StaticWorld) {
   };
   c = { strip: null, pool: [], islet: [], range: [] };
   const ps = POIS.findIndex((p) => p.id === "peel-strip");
-  {
+  if (ps >= 0) {
     const [x, , z] = sw(STRIP_PAD[0], STRIP_PAD[1]), [x1, , z1] = sw(STRIP_PAD[0] + 1, STRIP_PAD[1]);
     const into: TukSpot[] = []; pad(x, z, dmath.atan2(-(x1 - x), -(z1 - z)), ps, 14, into); c.strip = into[0] ?? null;
   }
-  for (const [id, dx, dz, hint] of HELIPADS) { const i = POIS.findIndex((p) => p.id === id), P = POIS[i]; pad(P.x + dx, P.z + dz, hint, i, 90, c.pool); }
+  const pads = isSunburst() ? SUNBURST_HELIPADS : HELIPADS;
+  for (const [id, dx, dz, hint] of pads) {
+    const i = POIS.findIndex((p) => p.id === id);
+    if (i < 0) continue;
+    const P = POIS[i];
+    pad(P.x + dx, P.z + dz, hint, i, 90, c.pool);
+  }
+  if (isSunburst() && !c.strip && c.pool.length) c.strip = c.pool.shift()!;
   const li = POIS.findIndex((p) => p.id === "lobby-islet");
-  { const [x, z] = islet.toWorld(0, 46); pad(x, z, islet.worldYaw(Math.PI), li, 30, c.islet); }
-  { const [x, , z] = sw(RANGE_LINE_X - 14, 34); pad(x, z, RANGE_YAW_DOWNRANGE, ps, 40, c.range); }
+  if (li >= 0) { const [x, z] = islet.toWorld(0, 46); pad(x, z, islet.worldYaw(Math.PI), li, 30, c.islet); }
+  if (ps >= 0) { const [x, , z] = sw(RANGE_LINE_X - 14, 34); pad(x, z, RANGE_YAW_DOWNRANGE, ps, 40, c.range); }
   CACHE.set(world, c);
   return c;
 }

@@ -1,6 +1,8 @@
 // Every POI's static colliders, for the server and client prediction. Add nothing here by hand — each POI exports
 // `colliders` from shared/pois/<id>.ts and is listed once below.
 import type { Box } from "../world/colliders";
+import { isSunburst } from "../world/maps";
+import { SUNBURST_CLEARINGS, SUNBURST_COLLIDERS, SUNBURST_POIS_DATA } from "./sunburst/index";
 import * as peelHarbor from "./peel-harbor";
 import * as theWreck from "./the-wreck";
 import * as mangoMarket from "./mango-market";
@@ -23,11 +25,11 @@ const ALL = [peelHarbor, theWreck, mangoMarket, stiltTown, coconutCove, bananaTe
   peelStrip, thePlantation, cnvsLab, theMurk, cocoCaves, canopyLine, wreckBay, lobbyIslet];
 
 export function allColliders(): Box[] {
-  return ALL.flatMap((m) => m.colliders);
+  return isSunburst() ? SUNBURST_COLLIDERS : ALL.flatMap((m) => m.colliders);
 }
 
 export function allClearings() {
-  return ALL.flatMap((m) => m.clearings);
+  return isSunburst() ? SUNBURST_CLEARINGS : ALL.flatMap((m) => m.clearings);
 }
 
 /** designed loot (`LOOT_SPOTS` contract) of the POIs that export it, by POI id (= the module file name).
@@ -39,6 +41,10 @@ const IDS = ["peel-harbor", "the-wreck", "mango-market", "stilt-town", "coconut-
   "lookout-point", "peel-strip", "the-plantation", "cnvs-lab", "the-murk", "coco-caves", "canopy-line", "wreck-bay", "lobby-islet"];
 export function lootSpotsById(): Record<string, LootSpots> {
   const out: Record<string, LootSpots> = {};
+  if (isSunburst()) {
+    for (const m of SUNBURST_POIS_DATA) if (m.LOOT_SPOTS.chests.length || m.LOOT_SPOTS.floor.length) out[m.id] = m.LOOT_SPOTS;
+    return out;
+  }
   ALL.forEach((m, i) => { const ls = (m as { LOOT_SPOTS?: LootSpots }).LOOT_SPOTS; if (ls && (ls.chests?.length || ls.floor?.length)) out[IDS[i]] = ls; });
   return out;
 }
@@ -47,6 +53,10 @@ export function lootSpotsById(): Record<string, LootSpots> {
 export type KitRoomLite = { id?: string; x: number; y: number; z: number; yaw: number; w: number; d: number; h: number; openings: Array<{ kind: string }> };
 export function interiorRoomsById(): Record<string, KitRoomLite[]> {
   const out: Record<string, KitRoomLite[]> = {};
+  if (isSunburst()) {
+    for (const m of SUNBURST_POIS_DATA) if (m.INTERIOR_ROOMS.length) out[m.id] = m.INTERIOR_ROOMS;
+    return out;
+  }
   // + LOOT_ROOMS: rooms a POI draws itself (e.g. the Wreck Bay galleon's listed cabins) declared in world frame
   // for the loot census only — never built by the client, never collided
   ALL.forEach((m, i) => { const r = [...((m as { INTERIOR_ROOMS?: KitRoomLite[] }).INTERIOR_ROOMS ?? []), ...((m as { LOOT_ROOMS?: KitRoomLite[] }).LOOT_ROOMS ?? [])]; if (r.length) out[IDS[i]] = r; });
@@ -58,6 +68,10 @@ export function interiorRoomsById(): Record<string, KitRoomLite[]> {
 export type HotZone = { x: number; z: number; r: number; chests: number; roof: number };
 export function hotZonesById(): Record<string, HotZone[]> {
   const out: Record<string, HotZone[]> = {};
+  if (isSunburst()) {
+    for (const m of SUNBURST_POIS_DATA) if (m.LOOT_HOT.length) out[m.id] = m.LOOT_HOT;
+    return out;
+  }
   ALL.forEach((m, i) => { const z = (m as { LOOT_HOT?: HotZone[] }).LOOT_HOT; if (z?.length) out[IDS[i]] = z; });
   return out;
 }

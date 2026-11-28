@@ -14,6 +14,8 @@
 // erosion → terraces → pads → harbor keep-low → gorge + river → paths → exact coast distance → biomes → quantise + hash.
 // Contract kept: POI pad promises (map.ts), sea level 0, TerrainData { heights, biome, res } + extras (coast, path, hash).
 import { Biome, POIS, WORLD, poiById } from "./map";
+import { isSunburst } from "./maps";
+import { SUNBURST_PATHS, sunburstTerrainRocks } from "./sunburst-terrain-gen";
 import { Simplex2, clamp, lerp, mulberry32, smoothstep } from "./noise";
 import type { Box } from "./colliders";
 import { gzipSync, gunzipSync } from "three/examples/jsm/libs/fflate.module.js";
@@ -671,6 +673,7 @@ export function padWeight(n: Simplex2, px: number, pz: number, pad: number, blen
 
 /** smoothed, meandering path centrelines (exported so rocks/veg/props can follow the same lines) */
 export function pathLines(): Array<{ id: string; pts: Pt[]; w: number }> {
+  if (isSunburst()) return SUNBURST_PATHS.map((P, idx) => ({ id: "sb-" + idx, pts: catmull(P.pts, 6, false), w: P.w * 0.5 }));
   const n = new Simplex2(WORLD.SEED + 404);
   const all: Array<{ id: string; pts: Pt[]; w?: number; mw?: number }> = PATHS.concat(ROT_TRAILS.map((t) => ({ id: t.id, pts: t.pts, w: 1.8, mw: 0 })));
   return all.map((P) => {
@@ -1507,6 +1510,7 @@ export function kipukaAt(x: number, z: number): number {
  * and stops (tributaries → branching). Half-widths 1.5–3 m (3–6 m wide channels). Visual (material + audio); the same
  * lines on every client. */
 export function lavaChannels(t: TerrainData): LavaLine[] {
+  if (isSunburst()) return [];
   if (t.lava) return t.lava;
   const res = t.res, H = WORLD.HALF, C = WORLD.CELL, V = VOLCANO;
   const sm = blur(t.heights, res, 2);
@@ -1798,6 +1802,7 @@ const SKIN_EXCLUDE = { x: -590, z: 470, r: 165, a0: 132, a1: 254 };
 let SKIN_CACHE: { hash: number | undefined; chains: SkinChain[] } | null = null;
 /** the island's steep sea cliffs as continuous chains (deterministic from the heights — client + server agree) */
 export function cliffSkins(t: TerrainData): SkinChain[] {
+  if (isSunburst()) return [];
   if (SKIN_CACHE && SKIN_CACHE.hash === t.hash && t.hash !== undefined) return SKIN_CACHE.chains;
   const res = t.res, H = WORLD.HALF, C = WORLD.CELL;
   const hAt = (x: number, z: number) => {
@@ -1892,7 +1897,7 @@ const ROCKS_MEMO = new WeakMap<TerrainData, { keep: RockKeep[] | undefined; n: n
 export function terrainRocks(t: TerrainData): RockInstance[] {
   const m = ROCKS_MEMO.get(t);
   if (m && m.keep === t.keep && m.n === (t.keep?.length ?? -1)) return m.rocks;
-  const rocks = terrainRocksBuild(t);
+  const rocks = isSunburst() ? sunburstTerrainRocks(t) : terrainRocksBuild(t);
   ROCKS_MEMO.set(t, { keep: t.keep, n: t.keep?.length ?? -1, rocks });
   return rocks;
 }

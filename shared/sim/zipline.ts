@@ -19,15 +19,19 @@
 // position every tick (nearest cable; poles never share a point) and the ride direction from the horizontal velocity.
 // The server's snapshot (f64 self state) therefore restores a ride exactly and the client replays it bit-identically.
 import { LAYOUT, ZIP_HANG, zipY } from "../pois/canopy-line";
+import { SUNBURST_ZIPS } from "../pois/sunburst/index";
+import { isSunburst } from "../world/maps";
 import { GRAVITY, JUMP_V } from "./const";
 
 /** PS.Zip (shared/sim/player.ts) — kept numeric here so this module never imports player.ts (no cycle) */
 export const ZIP_ST = 6;
 export const ZIP = {
-  /** trolley motor floor / top speed (m/s) */
-  VMIN: 6.5, VMAX: 25,
-  /** quadratic drag: terminal speed on a 30° line ≈ sqrt(g·sin30 / DRAG) */
-  DRAG: 0.02,
+  /** trolley motor floor / top speed (m/s) — +30 % faster than baseline (6.5 → 8.45, 25 → 32.5) */
+  VMIN: 8.45, VMAX: 32.5,
+  /** quadratic drag scaled by 1/1.3² so downhill terminal speed on every slope is also +30 % faster */
+  DRAG: 0.011834,
+  /** downhill gravity acceleration multiplier matching the +30 % travel speed */
+  ACCEL: 1.3,
   /** horizontal reach to a pole to grab its trolley (m); vertical window of the feet relative to the pole's deck */
   ATTACH_R: 2.4, ATTACH_DY: [-0.6, 1.4] as const,
   /** the ride starts / ends this many metres (horizontal) out from each pole */
@@ -45,10 +49,13 @@ export interface ZipLine {
   /** ride range in t */
   t0: number; t1: number;
 }
-export const ZIP_LINES: ZipLine[] = LAYOUT.zips.map((z) => {
+const toZipLine = (z: { id: string; a: readonly [number, number, number]; b: readonly [number, number, number]; sag: number; ya: number; yb: number }): ZipLine => {
   const dx = z.b[0] - z.a[0], dz = z.b[2] - z.a[2], L2 = dx * dx + dz * dz, Lh = Math.sqrt(L2);
   return { id: z.id, ax: z.a[0], ay: z.a[1], az: z.a[2], bx: z.b[0], by: z.b[1], bz: z.b[2], sag: z.sag, ya: z.ya, yb: z.yb, dx, dz, L2, Lh, t0: ZIP.END_M / Lh, t1: 1 - ZIP.END_M / Lh };
-});
+};
+export const ZIP_LINES: ZipLine[] = LAYOUT.zips.map(toZipLine);
+export const SUNBURST_ZIP_LINES: ZipLine[] = SUNBURST_ZIPS.map(toZipLine);
+export const activeZipLines = (): ZipLine[] => (isSunburst() ? SUNBURST_ZIP_LINES : ZIP_LINES);
 
 /** the subset of Player the ride touches (structural: no import of player.ts) */
 export interface ZipRider {
@@ -63,9 +70,10 @@ void zipY;
 
 /** the pole a player on foot could grab: nearest end within reach (returns line index * 2 + end) or -1 */
 export function zipNear(x: number, y: number, z: number): number {
+  const lines = activeZipLines();
   let best = -1, bd = ZIP.ATTACH_R * ZIP.ATTACH_R;
-  for (let i = 0; i < ZIP_LINES.length; i++) {
-    const L = ZIP_LINES[i];
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i];
     for (let e = 0; e < 2; e++) {
       const px = e ? L.bx : L.ax, pz = e ? L.bz : L.az, deck = e ? L.yb : L.ya;
       const d = (x - px) * (x - px) + (z - pz) * (z - pz);
@@ -88,7 +96,7 @@ export function zipAttach(p: ZipRider): boolean {
   if (p.st !== 0 || p.swim) return false;
   const k = zipNear(p.x, p.y, p.z);
   if (k < 0) return false;
-  const L = ZIP_LINES[k >> 1], fromB = (k & 1) === 1;
+  const L = activeZipLines()[k >> 1], fromB = (k & 1) === 1;
   const t = fromB ? L.t1 : L.t0, s = fromB ? -1 : 1;
   place(p, L, t);
   const ty = cableDY(L, t), tl = Math.sqrt(L.L2 + ty * ty);
@@ -100,10 +108,11 @@ export function zipAttach(p: ZipRider): boolean {
 
 /** the cable the rider hangs on (nearest to the hanging point), its t; -1 when none is within 0.5 m */
 function lineOf(p: ZipRider): { i: number; t: number } {
+  const lines = activeZipLines();
   let bi = -1, bt = 0, bd = 0.25;
   const hy = p.y + ZIP_HANG;
-  for (let i = 0; i < ZIP_LINES.length; i++) {
-    const L = ZIP_LINES[i];
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i];
     let t = ((p.x - L.ax) * L.dx + (p.z - L.az) * L.dz) / L.L2;
     if (t < -0.01 || t > 1.01) continue;
     t = Math.min(1, Math.max(0, t));
@@ -118,7 +127,7 @@ function lineOf(p: ZipRider): { i: number; t: number } {
 export function stepZip(p: ZipRider, pressed: number, dt: number, JUMP: number, USE: number): void {
   const { i, t } = lineOf(p);
   if (i < 0) { toFoot(p); return; }
-  const L = ZIP_LINES[i];
+  const L = activeZipLines()[i];
   const ty = cableDY(L, t), tl = Math.sqrt(L.L2 + ty * ty);
   const s = p.vx * L.dx + p.vz * L.dz >= 0 ? 1 : -1;
   if (pressed & JUMP) { toFoot(p); p.vy = Math.max(0, p.vy) + JUMP_V * ZIP.HOP; return; }
@@ -126,7 +135,7 @@ export function stepZip(p: ZipRider, pressed: number, dt: number, JUMP: number, 
   // speed along the cable: gravity's component along the ride direction, quadratic drag, motor floor
   let v = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
   const uy = s * ty / tl;
-  v += (-GRAVITY * uy - ZIP.DRAG * v * v) * dt;
+  v += (-GRAVITY * ZIP.ACCEL * uy - ZIP.DRAG * v * v) * dt;
   if (v < ZIP.VMIN) v = ZIP.VMIN; else if (v > ZIP.VMAX) v = ZIP.VMAX;
   let tn = t + s * v * dt / tl;
   const end = s > 0 ? tn >= L.t1 : tn <= L.t0;

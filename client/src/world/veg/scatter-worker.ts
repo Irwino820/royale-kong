@@ -2,15 +2,17 @@
 // veg-scatter.ts scatterVegetation, ~0.8–1.5 s) runs here while the main thread builds the species / pools and keeps
 // rendering the loading screen. Same code, same inputs → the same list the server replays for its trunk colliders.
 import { Terrain } from "../../../../shared/world/terrain";
+import { setActiveMap, type MapId } from "../../../../shared/world/maps";
 import { scatterVegetation, setSpawnMask, RockIndex, type Clearing, type VegInstance } from "../../../../shared/world/veg-scatter";
 import type { RockInstance } from "../../../../shared/world/terrain-gen";
 
-interface Msg { heights: Float32Array; biome: Uint8Array; clearings: Clearing[]; rocks?: RockInstance[]; mask?: ArrayBuffer | null }
+interface Msg { heights: Float32Array; biome: Uint8Array; clearings: Clearing[]; rocks?: RockInstance[]; mask?: ArrayBuffer | null; mapId?: MapId }
 
 self.onmessage = (e: MessageEvent<Msg>) => {
   const m = e.data;
   const t0 = performance.now();
   try {
+    if (m.mapId) setActiveMap(m.mapId);
     const t = new Terrain(m.heights, m.biome);
     setSpawnMask(m.mask ?? null);
     const list: VegInstance[] = scatterVegetation(t, m.clearings, undefined, m.rocks ? new RockIndex(m.rocks) : undefined);

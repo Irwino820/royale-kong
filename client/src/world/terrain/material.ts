@@ -12,8 +12,9 @@
 //   • beyond ~400 m the island is shaded from a baked top-down albedo map (one fetch, no tiling at all)
 import * as THREE from "three";
 import { WORLD } from "../../../../shared/world/map";
+import { isSunburst } from "../../../../shared/world/maps";
 import { PLANTATION_FIELD, VOLCANO } from "../../../../shared/world/terrain-gen";
-import { LAYERS, LAYER_COUNT, layerIndex, type LayerArrays } from "./textures";
+import { activeLayers, LAYER_COUNT, layerIndex, type LayerArrays } from "./textures";
 import { TERRAIN_INST_PARS, TERRAIN_LODV } from "./lod";
 
 /** The six res² RGBA8 data maps are packed into TWO array textures (2 samplers instead of 6 — the lit terrain
@@ -122,12 +123,13 @@ float strata(vec3 p) { float ph = p.y * 0.42 + nT(p.xz * 0.00625).a * 1.6; float
 
 export function makeTerrainMaterial(arrays: LayerArrays, gpu: TerrainGpuData) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
-  const tint = LAYERS.map((l) => new THREE.Vector3(...l.tint));
-  const params = LAYERS.map((l) => new THREE.Vector4(l.tile, l.sat, l.rough, l.nrm));
+  const LSET = activeLayers();
+  const tint = LSET.map((l) => new THREE.Vector3(...l.tint));
+  const params = LSET.map((l) => new THREE.Vector4(l.tile, l.sat, l.rough, l.nrm));
   // per layer: x = second anti-tiling sample on/off, y = detail-normal / full-triplanar distance (m) — dark
   // low-contrast layers (cinder, lava crust, mud, reef, basalt) skip the anti-tiling fetch and fetch normals nearer
   const ND: Record<string, number> = { cinder: 32, lava: 45, mud: 45, reef: 45, basalt: 60 };
-  const params2 = LAYERS.map((l) => new THREE.Vector4(ND[l.id] ? 0 : 1, ND[l.id] ?? 130, 0, 0));
+  const params2 = LSET.map((l) => new THREE.Vector4(ND[l.id] ? 0 : 1, ND[l.id] ?? 130, 0, 0));
   const uniforms = {
     tAlb: { value: arrays.albedo }, tNrm: { value: arrays.normal },
     tDat: { value: gpu.dat }, tW: { value: gpu.w },
@@ -136,6 +138,7 @@ export function makeTerrainMaterial(arrays: LayerArrays, gpu: TerrainGpuData) {
     uFarmRot: { value: new THREE.Vector2(Math.cos(PLANTATION_FIELD.yaw), Math.sin(PLANTATION_FIELD.yaw)) },
     uFarmC: { value: new THREE.Vector2(PLANTATION_FIELD.x, PLANTATION_FIELD.z) },
     uTime: { value: 0 },
+    uDesert: { value: isSunburst() ? 1.0 : 0.0 },
     tNoise: { value: terrainNoiseTexture() },
     tCell: { value: terrainCellTexture() },
     /** 1 while baking the top-down albedo map (output albedo, no lighting) */
@@ -178,7 +181,7 @@ export function makeTerrainMaterial(arrays: LayerArrays, gpu: TerrainGpuData) {
         uniform sampler2DArray tAlb; uniform sampler2DArray tNrm;
         uniform sampler2DArray tDat; uniform sampler2DArray tW;
         uniform vec4 uGrid; uniform vec3 uTint[NLAYERS]; uniform vec4 uParams[NLAYERS]; uniform vec4 uParams2[NLAYERS]; uniform vec2 uFarmRot; uniform vec2 uFarmC;
-        uniform float uTime; uniform float uBakeMode; uniform sampler2D tFar; uniform vec2 uFarD; uniform vec4 uLook; uniform vec2 uVolc; uniform vec3 uSunDir; uniform sampler2D tCell; uniform vec4 uKill;
+        uniform float uTime; uniform float uDesert; uniform float uBakeMode; uniform sampler2D tFar; uniform vec2 uFarD; uniform vec4 uLook; uniform vec2 uVolc; uniform vec3 uSunDir; uniform sampler2D tCell; uniform vec4 uKill;
         varying vec3 vTPos;
         vec2 gridUV(vec2 xz) { return ((xz + uGrid.x) / uGrid.y + 0.5) / uGrid.z; }
         ${GLSL_COMMON}
@@ -205,7 +208,7 @@ export function makeTerrainMaterial(arrays: LayerArrays, gpu: TerrainGpuData) {
           bool nearF = nw > 0.001;
           float tile = uParams[li].x; float layer = float(li);
           vec2 uv = p.xz / tile;
-          bool farm = li == ${L("farm")};
+          bool farm = li == ${L("farm")} && uDesert < 0.5;
           // farm furrows follow the plantation's planted rows (ridge centres on the plant lines, no anti-tiling warp)
           if (farm) { vec2 q = p.xz - uFarmC; uv = vec2(dot(q, uFarmRot) / tile + 0.0625, dot(q, vec2(-uFarmRot.y, uFarmRot.x)) / tile); warp = vec2(0.0); dmix = 0.0; }
           // EVERY layer goes triplanar past ~37° — a
@@ -352,7 +355,7 @@ export function makeTerrainMaterial(arrays: LayerArrays, gpu: TerrainGpuData) {
             // the 2.9 m plant spacing, alternate rows offset half a plant). Full strength from ~130 m and in the far bake
             // (the aerial reads green rows, not a brown field); near the ground it thins to low green cover between the
             // POI's own banana plants.
-            if (w1.a > 0.01) {
+            if (w1.a > 0.01 && uDesert < 0.5) {
               vec2 fq = p.xz - uFarmC;
               float lat = dot(fq, uFarmRot) / 3.7;
               float row = floor(lat + 0.5);
@@ -398,11 +401,11 @@ export function makeTerrainMaterial(arrays: LayerArrays, gpu: TerrainGpuData) {
             float dry = clamp(smoothstep(0.35, 0.75, macro) * 0.55 + 0.2 * smoothstep(0.05, -0.5, cavity) + 0.15 * aspect, 0.0, 0.6);
             float hollow = smoothstep(0.1, 0.6, cavity) * 0.7 + 0.3 * smoothstep(0.1, -0.6, aspect);
             vec3 macroTint = mix(vec3(0.92, 0.98, 0.9), vec3(1.12, 1.04, 0.9), dry) * mix(vec3(1.0), vec3(0.84, 0.94, 0.92), hollow);
-            col *= mix(vec3(1.0), macroTint, green * lk);
+            col *= mix(vec3(1.0), macroTint, green * lk * (1.0 - uDesert));
             col *= 1.0 + (macro2 - 0.5) * 0.2 * lk;
             // (no flat mown lawn at eye level) 8–25 m patches of sun-dried straw and of
             // darker lush clover in the meadow grass, + a fine ±8 % tuft-scale fleck — never one uniform lawn tone
-            if (w0.g > 0.05 && camD < 220.0 && uBakeMode < 0.5) {
+            if (w0.g > 0.05 && camD < 220.0 && uBakeMode < 0.5 && uDesert < 0.5) {
               vec4 gv = nT(p.xz * 0.0125 + 0.37);
               float dryP = smoothstep(0.56, 0.7, gv.a + 0.1 * (macro - 0.5)) * w0.g;
               float lush = smoothstep(0.6, 0.74, gv.r) * w0.g * (1.0 - dryP);
@@ -413,7 +416,7 @@ export function makeTerrainMaterial(arrays: LayerArrays, gpu: TerrainGpuData) {
             // from the air the jungle floor IS canopy (veg covers it): the far bake paints it a deep, mottled
             // canopy green, so canopy gaps and the terrain-only aerial read as forest (the target art's (79,97,47)),
             // not as olive-brown litter against lime meadows
-            if (uBakeMode > 0.5) {
+            if (uBakeMode > 0.5 && uDesert < 0.5) {
               vec3 canopy = vec3(0.046, 0.078, 0.02) * (0.7 + 0.6 * macro) * (0.85 + 0.3 * macro2);
               col = mix(col, canopy, w0.b * 0.85);
               // meadows + POI-ground rings from the air: clumps of shrubs / copse crowns over the grass (the far bake is

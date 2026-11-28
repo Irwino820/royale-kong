@@ -36,6 +36,7 @@ export const hash01 = (x: number, z: number) => { const s = Math.sin(x * 12.9898
 const TINT_AMP: Partial<Record<VegKind, [number, number]>> = {
   "jungle-tree": [1.9, 2.6], palm: [1.2, 1.3], "palm-leaning": [1.2, 1.3], bush: [1.4, 1.6], mangrove: [1.3, 1.4],
   "banana-plant": [1.1, 1.2], monstera: [1.1, 1.0], grass: [0.8, 0.9], groundcover: [0.9, 0.8], log: [0.6, 0.3],
+  cactus: [0.95, 0.95], "prickly-pear": [1.05, 1.0],
 };
 
 /** per-plant banana tint families + the leaves' dry-edge ramp
@@ -60,6 +61,8 @@ export class Tinter {
     // broadleaf crowns come in families so the hue varies tree to tree — a third
     // warmer olive-yellow, a fifth deeper blue-green, the rest the base green (5–10 % hue on top of the jitter)
     if (kind === "jungle-tree" || kind === "bush") { const f = hash01(x * 0.61 + 7.7, z * 1.3 - 2.9); if (f < 0.33) { h += 0.09; b *= 1.04; } else if (f > 0.8) { h -= 0.08; b *= 0.9; } }
+    // desert cacti & succulents vary naturally between sun-bleached sage-olive and deep blue-green Sonoran jade
+    if (kind === "cactus" || kind === "prickly-pear") { const f = hash01(x * 0.73 + 4.1, z * 1.19 - 6.3); if (f < 0.32) { h += 0.06; b *= 1.06; } else if (f > 0.74) { h -= 0.07; b *= 0.89; } }
     // a small random tint per plant stops the bananas all matching: banana plants come in
     // families too — a third sunnier yellow-green, a fifth deeper blue-green — plus their own value jitter; the tint
     // rides instanceColor into the mesh tiers AND the splat / impostor bank (same three floats), so far plants keep it

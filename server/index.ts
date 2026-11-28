@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
 import { Terrain } from "../shared/world/terrain";
 import { decodeTerrainFile, generateTerrain, type TerrainData } from "../shared/world/terrain-gen";
+import { activeMapInfo, isSunburst } from "../shared/world/maps";
 import { buildStaticWorld } from "../shared/sim/static-world";
 import { lootSpots } from "../shared/sim/loot-spots";
 import { Match, Phase } from "../shared/sim/match";
@@ -78,8 +79,9 @@ const t0 = performance.now();
 // the SAME bytes the client downloads (public/assets/terrain/island.bin); generating is the fallback (identical while
 // the baked file matches the generator). The content hash rides in "welcome" so a stale client can tell.
 let td: TerrainData;
-try { const b = fs.readFileSync(path.join(root, "public/assets/terrain/island.bin")); td = decodeTerrainFile(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); }
-catch (e) { log("island.bin unavailable, generating:", String(e)); td = generateTerrain(); }
+const mapInfo = activeMapInfo();
+try { const b = fs.readFileSync(path.join(root, "public", mapInfo.terrainBin)); td = decodeTerrainFile(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); }
+catch (e) { log(`${mapInfo.terrainBin} unavailable, generating:`, String(e)); td = isSunburst() ? (await import("../shared/world/sunburst-terrain-gen")).generateSunburstTerrain() : generateTerrain(); }
 const terrain = new Terrain(td.heights, td.biome);
 const { world, boxes, hash: worldHashV } = await buildStaticWorld(terrain, td);
 log(`world ready: ${terrain.res}² heightfield, ${boxes.length} boxes, terrain hash ${td.hash}, world hash ${worldHashV}, ${Math.round(performance.now() - t0)} ms`);

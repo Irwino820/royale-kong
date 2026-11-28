@@ -4,6 +4,8 @@
 // carries one byte per terrain sample: 0 = whatever the terrain says, else the Biome it drives like (Paved / Path).
 // Built once per world from the POIs' own layout data (server and client: same code, same bytes).
 import { Biome } from "../world/map";
+import { isSunburst } from "../world/maps";
+import { SUNBURST_PATHS } from "../world/sunburst-terrain-gen";
 import type { Terrain } from "../world/terrain";
 import { toWorld } from "../pois/coast-kit";
 import { APRON, HGR, RWY, STRIP, TAXI } from "../pois/peel-strip";
@@ -39,6 +41,10 @@ export function buildRoads(t: Terrain): Uint8Array {
       }
     }
   };
+  if (isSunburst()) {
+    for (const rd of SUNBURST_PATHS) stroke(rd.pts, rd.w * 0.65, Biome.Path);
+    return g;
+  }
   const rect = (f: typeof STRIP, x0: number, x1: number, z0: number, z1: number): P2[] => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(([x, z]) => { const p = toWorld(f, x, 0, z); return [p[0], p[2]] as const; });
   // the airstrip: the runway, the threshold apron, the taxiway out of the hangar
   fill(rect(STRIP, 0, RWY.len, -RWY.half, RWY.half), Biome.Paved);

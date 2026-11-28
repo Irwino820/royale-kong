@@ -47,6 +47,7 @@ export function createFields(terrain: Terrain): WaterFields {
   const harborPoi = POIS.find((p) => p.id === "peel-harbor");
   const wreckPoi = POIS.find((p) => p.id === "the-wreck");
   const bayPoi = POIS.find((p) => p.id === "wreck-bay");
+  const oasisPoi = POIS.find((p) => p.id === "emerald-oasis");
   // THE MURK: a disc around the POI (fades over 60 m, × calm). The berth faces world +Z at z ≈ 560: the basin/inlet is
   // SOUTH of the pad, x ≈ 400–740, z ≈ 560–780 — an ellipse, fading over ~90 m
   const masks: WaterFields["masks"] = {
@@ -55,7 +56,7 @@ export function createFields(terrain: Terrain): WaterFields {
     murk: murkPoi ? [murkPoi.x + 12, murkPoi.z + 4, 82] : [0, 0, -1e6],
     harbor: harborPoi ? [harborPoi.x - 30, harborPoi.z + 300, 1 / 190, 1 / 150] : [0, 0, 1e-6, 1e-6],
     // THE WRECK's emerald lagoon: a disc over the wreck's shallows (fades over 50 m)
-    lagoon: wreckPoi ? [wreckPoi.x - 60, wreckPoi.z + 10, 110] : [0, 0, -1e6],
+    lagoon: wreckPoi ? [wreckPoi.x - 60, wreckPoi.z + 10, 110] : oasisPoi ? [oasisPoi.x, oasisPoi.z, 84] : [0, 0, -1e6],
     // WRECK BAY's cove (poi-wreckbay: the POI sits at (40, −700), r 110; the cove's sand shallows fill the POI disc and
     // the beach along z ≈ −650) — emerald-turquoise, sheltered
     lagoon2: bayPoi ? [bayPoi.x, bayPoi.z + 10, 95] : [0, 0, -1e6],

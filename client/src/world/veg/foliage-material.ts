@@ -547,7 +547,8 @@ if ( uVegShadowBand.y > 0.0 && vDist > uVegShadowBand.x ) {
 // directLight.color already shadowed)
 const F_DIRECT = /* glsl */ `
 void RE_Direct_Veg( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
-  float nl = dot( geometryNormal, directLight.direction );
+  float nlFront = dot( geometryNormal, directLight.direction );
+  float nl = nlFront;
   #ifdef VEG_TWOSIDE
     // thin sunlit blades (palm fronds): the face turned away from the sun still glows — the target art's crowns read
     // bright lime from below too, never a dark comb against the sky
@@ -572,11 +573,10 @@ void RE_Direct_Veg( const in IncidentLight directLight, const in vec3 geometryPo
   // a leaf is always in its OWN shadow on the far side: light the glow half from the unshadowed sun
   vec3 tl = max( directLight.color, vegSunRaw * 0.35 );
   reflectedLight.directDiffuse += tl * tc * uTrans * uGrade.y * ( back * 0.9 + thru * 0.35 );
-  // glossy leaf spec (front side only). Leaf-cluster cards carry fake puffed normals: a full GGX lobe on them paints
-  // whole cards sun-white, so they keep only a trace of it
+  // glossy leaf spec (front side only — gate on unflipped nlFront so grazing shaded back-faces never hit V_GGX's 0.5/EPSILON spike)
   #ifndef VEG_MATTE
   if ( uVegLite == 0.0 ) {
-    vec3 irr2 = saturate( nl ) * directLight.color * uSpecK;
+    vec3 irr2 = saturate( nlFront ) * directLight.color * uSpecK;
     #ifdef VEG_BB_FRAG
       irr2 *= 0.18;
     #endif

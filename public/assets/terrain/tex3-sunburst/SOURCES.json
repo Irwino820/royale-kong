@@ -1,0 +1,17 @@
+{
+ "note": "Stylized desert PBR terrain layers generated for Sunburst Canyon (golden AI sand ripple source + procedural stratified redrock, alkali clay, oasis turf and sandstone paving with derived Sobel normal/AO/roughness maps).",
+ "layers": [
+  "sand",
+  "grass",
+  "jungle",
+  "path",
+  "cliff",
+  "rock",
+  "cinder",
+  "farm",
+  "lava",
+  "mud",
+  "reef",
+  "basalt"
+ ]
+}

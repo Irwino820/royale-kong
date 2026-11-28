@@ -17,7 +17,11 @@ export const WORLD = {
 export type PoiId =
   | "peel-harbor" | "the-wreck" | "ripe-peak" | "banana-temple" | "coconut-cove" | "stilt-town"
   | "the-plantation" | "cnvs-lab" | "mist-falls" | "peel-strip" | "lookout-point" | "mango-market"
-  | "the-murk" | "coco-caves" | "canopy-line" | "wreck-bay" | "lobby-islet";
+  | "the-murk" | "coco-caves" | "canopy-line" | "wreck-bay" | "lobby-islet"
+  // Sunburst Canyon (desert island) POIs
+  | "banana-pyramid" | "emerald-oasis" | "sunburst-bazaar" | "redrock-canyon" | "mesa-citadel"
+  | "dune-refinery" | "skyship-wreck" | "cactus-gulch" | "solar-spire" | "mirage-docks"
+  | "scorpion-arch" | "bone-ridge";
 
 export interface Poi {
   id: PoiId;
@@ -35,7 +39,7 @@ export interface Poi {
   refs: string[];
 }
 
-export const POIS: Poi[] = [
+export const KONG_POIS: readonly Poi[] = [
   { id: "peel-harbor",    name: "PEEL HARBOR",    x:  600, z:  360, r: 190, padY: 3.2, pad: 190, blend: 70, refs: ["poi-01-peel-harbor.png"] },
   { id: "mango-market",   name: "MANGO MARKET",   x:  430, z:   20, r: 150, padY: 9,   pad: 140, blend: 80, refs: ["poi-12-mango-market.png"] },
   { id: "coconut-cove",   name: "COCONUT COVE",   x:   90, z:  400, r: 150, padY: 4,   pad: 110, blend: 70, refs: ["poi-05-coconut-cove.png"] },
@@ -55,8 +59,10 @@ export const POIS: Poi[] = [
   { id: "lobby-islet",    name: "LOBBY ISLET",    x:    0, z: 1020, r:  90, padY: 2.5, pad: 60,  blend: 40, refs: ["char-02-lobby-island.png"] },
 ];
 
+export const POIS: Poi[] = [...KONG_POIS];
+
 export const poiById = (id: PoiId): Poi => {
-  const p = POIS.find((q) => q.id === id);
+  const p = POIS.find((q) => q.id === id) ?? KONG_POIS.find((q) => q.id === id);
   if (!p) throw new Error(`unknown POI ${id}`);
   return p;
 };

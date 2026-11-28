@@ -14,6 +14,7 @@ import { buildPalm } from "./species/palm";
 import { buildJungleTree, buildBush, buildMangrove, buildVine } from "./species/canopy";
 import { buildBanana, buildMonstera, buildFern, buildFlowers } from "./species/understory";
 import { buildGrass, buildBamboo, buildLog, buildGroundcover, buildLitter } from "./species/ground";
+import { buildCactus, buildPricklyPear } from "./species/cactus";
 import { initVegTextures, vegTexturesReady } from "./tex";
 import { buildStudio, STUDIO_VIEWS } from "./studio";
 import type { Species } from "./species/types";
@@ -27,6 +28,7 @@ import { terrainRocks, type RockInstance } from "../../../../shared/world/terrai
 import { terrainData } from "../terrain/load";
 import { allClearings, allColliders } from "../../../../shared/pois/index";
 import { Biome } from "../../../../shared/world/map";
+import { activeMapId, isSunburst } from "../../../../shared/world/maps";
 import { flag } from "../../flags";
 
 const DETAIL_RANGE = 62;
@@ -49,11 +51,20 @@ const BUILDERS: Record<VegKind, (v: number) => Species> = {
   groundcover: buildGroundcover,
   vine: buildVine,
   litter: buildLitter,
+  cactus: buildCactus,
+  "prickly-pear": buildPricklyPear,
 };
+
+/** Only build & bake biome-relevant species per map (keeps Kong Island VRAM/boot 100% untouched and Sunburst fast) */
+const SUNBURST_KINDS = new Set<VegKind>(["palm", "palm-leaning", "bush", "cactus", "prickly-pear", "grass", "flowers", "fern", "groundcover"]);
+const activeVegKinds = (): VegKind[] => (Object.keys(BUILDERS) as VegKind[]).filter((k) =>
+  isSunburst() ? SUNBURST_KINDS.has(k) : (k !== "cactus" && k !== "prickly-pear"),
+);
 
 /** initial LOD buffer capacities per variant pool (they grow if a view needs more) */
 const CAPS: Partial<Record<VegKind, { cap0: number; cap1: number }>> = {
   "jungle-tree": { cap0: 64, cap1: 400 }, palm: { cap0: 64, cap1: 400 }, "palm-leaning": { cap0: 48, cap1: 200 },
+  cactus: { cap0: 96, cap1: 600 }, "prickly-pear": { cap0: 128, cap1: 800 },
   bush: { cap0: 128, cap1: 900 }, monstera: { cap0: 128, cap1: 700 }, "banana-plant": { cap0: 96, cap1: 500 },
   bamboo: { cap0: 32, cap1: 128 }, mangrove: { cap0: 64, cap1: 400 }, log: { cap0: 32, cap1: 96 }, vine: { cap0: 32, cap1: 160 }, litter: { cap0: 48, cap1: 160 },
   grass: { cap0: 4000, cap1: 9000 }, fern: { cap0: 600, cap1: 1500 }, flowers: { cap0: 600, cap1: 1500 }, groundcover: { cap0: 1500, cap1: 3500 },
@@ -172,7 +183,7 @@ class VegSystem implements VegApi {
   /** every big-plant pool + its family's merged part groups (one draw per part + material across variants) */
   makePools() {
     const fam = new Map<string, { kinds: VegKind[]; pools: SpeciesPool[] }>();
-    for (const kind of Object.keys(BUILDERS) as VegKind[]) {
+    for (const kind of activeVegKinds()) {
       const f = FAMILY_OF[kind] ?? kind;
       let e = fam.get(f); if (!e) { e = { kinds: [], pools: [] }; fam.set(f, e); }
       e.kinds.push(kind);
@@ -288,7 +299,7 @@ class VegSystem implements VegApi {
     // splats per px² of a plant's screen size by tier (the far tier's GPU cost; low / medium switch to splats nearer)
     { const d = { epic: 1, high: 1, medium: 0.85, low: 0.72 }[q.tier] ?? 1; this.splats?.setDensityK(d); this.splatsSmall?.setDensityK(d); }
     // shadow casters: every veg mesh that casts at build keeps its flag in baseCast
-    const TREES = /^veg:(jungle-tree|palm|palm-leaning|mangrove|bamboo)[:|]/;
+    const TREES = /^veg:(jungle-tree|palm|palm-leaning|mangrove|bamboo|cactus)[:|]/;
     this.ctx.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh || !/^veg:/.test(o.name) || /impostor/.test(o.name)) return;
@@ -377,8 +388,9 @@ class VegSystem implements VegApi {
     } catch (e) { console.warn("veg: terrain data / rocks unavailable, scattering without them", e); }
     this.stats.rocksMs = Math.round(performance.now() - t0);
     const sync = () => scatterVegetation(this.ctx.terrain, this.clearings, undefined, this.env.rocks);
-    if (typeof Worker === "undefined" || flag("vegsyncscatter")) { this.scatterJob = loadSpawnMask().then(sync); return; }
-    this.scatterJob = loadSpawnMask().then(() => new Promise<VegInstance[]>((res) => {
+    const loadMask = () => (isSunburst() ? Promise.resolve(false) : loadSpawnMask());
+    if (typeof Worker === "undefined" || flag("vegsyncscatter")) { this.scatterJob = loadMask().then(sync); return; }
+    this.scatterJob = loadMask().then(() => new Promise<VegInstance[]>((res) => {
       let w: Worker;
       try { w = new Worker(new URL("./scatter-worker.ts", import.meta.url), { type: "module" }); }
       catch (e) { console.warn("veg: no scatter worker, scattering on the main thread", e); res(sync()); return; }
@@ -389,7 +401,7 @@ class VegSystem implements VegApi {
         else { console.warn("veg: scatter worker failed, scattering on the main thread", e.data.error); res(sync()); }
       };
       w.onerror = (e) => { w.terminate(); console.warn("veg: scatter worker error, scattering on the main thread", e.message); res(sync()); };
-      w.postMessage({ heights: T.heights, biome: T.biome, clearings: this.clearings, rocks: this.rocks, mask: spawnMaskBytes() });
+      w.postMessage({ heights: T.heights, biome: T.biome, clearings: this.clearings, rocks: this.rocks, mask: isSunburst() ? null : spawnMaskBytes(), mapId: activeMapId() });
     }));
   }
 
@@ -416,7 +428,7 @@ class VegSystem implements VegApi {
       try {
         const w = new Worker(new URL("./detail-worker.ts", import.meta.url), { type: "module" });
         const T = this.ctx.terrain;
-        w.postMessage({ type: "init", heights: T.heights, biome: T.biome, clearings: this.clearings, rocks, path: this.env.path, pathRes: this.env.pathRes, canopy: this.canopy.cov, mask: spawnMaskBytes() });
+        w.postMessage({ type: "init", mapId: activeMapId(), heights: T.heights, biome: T.biome, clearings: this.clearings, rocks, path: this.env.path, pathRes: this.env.pathRes, canopy: this.canopy.cov, mask: isSunburst() ? null : spawnMaskBytes() });
         w.onmessage = (e: MessageEvent<GenCell>) => this.acceptCell(e.data);
         w.onerror = (e) => { console.warn("veg: detail worker failed, generating on the main thread", e.message); this.worker = null; this.pending.clear(); };
         this.worker = w;
@@ -859,7 +871,7 @@ const mod: WorldModule = {
     // the island scatter runs in a worker meanwhile
     system.startScatter();
     // every species is built up-front (deterministic geometry) so the pools exist before POIs plant into them
-    for (const kind of Object.keys(BUILDERS) as VegKind[]) {
+    for (const kind of activeVegKinds()) {
       for (let v = 0; v < VARIANTS[kind]; v++) {
         try { system.getSpecies(kind, v); } catch (e) { console.error(`veg: species ${kind}:${v} failed`, e); }
       }

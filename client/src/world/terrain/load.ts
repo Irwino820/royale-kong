@@ -5,6 +5,7 @@
 // Falls back to generating in-thread if the file is missing (dev only — slower, but identical).
 import { Terrain } from "../../../../shared/world/terrain";
 import { decodeTerrainFile, generateTerrain, type TerrainData } from "../../../../shared/world/terrain-gen";
+import { activeMapInfo, isSunburst } from "../../../../shared/world/maps";
 import { assetUrl } from "../../engine/assets";
 import { rockKeeps } from "../../engine/static-world";
 import { startTerrainJobs } from "./jobs";
@@ -18,13 +19,19 @@ export function terrainData(): TerrainData {
 
 export async function loadTerrain(): Promise<Terrain> {
   const keepsP = rockKeeps();
+  const bin = activeMapInfo().terrainBin;
   try {
-    const r = await fetch(assetUrl("assets/terrain/island.bin"), { cache: "no-cache" });
-    if (!r.ok) throw new Error(`island.bin ${r.status}`);
+    const r = await fetch(assetUrl(bin), { cache: "no-cache" });
+    if (!r.ok) throw new Error(`${bin} ${r.status}`);
     data = decodeTerrainFile(await r.arrayBuffer());
   } catch (e) {
     console.warn("[terrain] baked file unavailable, generating in-thread:", e);
-    data = generateTerrain();
+    if (isSunburst()) {
+      const { generateSunburstTerrain } = await import("../../../../shared/world/sunburst-terrain-gen");
+      data = generateSunburstTerrain();
+    } else {
+      data = generateTerrain();
+    }
   }
   // rock keep-outs = the LIVE POI clearings (shared/world/rock-keeps.ts), not the file's snapshot; computed off-thread
   // by static-world.worker.ts during game boot so boot JS stays free of shared/pois (~2.4 MB), with dynamic fallback.

@@ -25,6 +25,9 @@ import {
   hasVictoryCrown, loadPlayerOutfit, outfitFor, savePlayerOutfit, type PlayerOutfitPref,
 } from "../actors/outfit-pick";
 import { EMOTES } from "../actors/emotes";
+import { MAPS, activeMapId, activeMapInfo } from "../../../shared/world/maps";
+import { switchMapAndReload } from "../world/active-map";
+import { preferences } from "../settings/preferences";
 
 const NAME_KEY = "kr-callsign", MODE_KEY = "kr-mode", DIFF_KEY = "kr-bot-difficulty";
 const NAME_MAX = 14;
@@ -100,6 +103,24 @@ export function createLobby(actions: LobbyActions): LobbyScreen {
   const btnJoin = h("button", "tn-btn", joinRow); btnJoin.type = "button"; btnJoin.textContent = "Join";
   const frErr = h("div", "tn-play-help tn-play-ferr", fr); frErr.setAttribute("role", "alert");
 
+  // Quick lobby music mute/unmute toggle in the bottom-right corner (synced live with Settings → Audio → Lobby music)
+  const btnMusic = h("button", "tn-play-link tn-play-link--sm tn-play-music", root);
+  btnMusic.type = "button";
+  let lastMusicVol = Math.max(0.25, preferences.value.music || 0.75);
+  const paintMusic = () => {
+    const on = preferences.value.music > 0.001;
+    if (on) lastMusicVol = preferences.value.music;
+    btnMusic.setAttribute("aria-pressed", String(on));
+    btnMusic.setAttribute("aria-label", on ? "Mute lobby music" : "Unmute lobby music");
+    btnMusic.innerHTML = `${on ? ICON.music : ICON.musicOff}<span>${on ? "Jungle Music" : "Music Muted"}</span>`;
+    btnMusic.classList.toggle("is-muted", !on);
+  };
+  btnMusic.addEventListener("click", () => {
+    const on = preferences.value.music > 0.001;
+    preferences.set({ music: on ? 0 : lastMusicVol });
+  });
+  preferences.subscribe(() => paintMusic());
+
   const toast = h("div", "tn-toast tn-play-toast", root); toast.setAttribute("role", "status");
 
   // ---------------- left column
@@ -107,11 +128,25 @@ export function createLobby(actions: LobbyActions): LobbyScreen {
   // PLAY tab (home / invited / private lobby room)
   const play = h("section", "tn-play-sec-play", main);
   const eyebrow = h("div", "tn-eyebrow tn-play-eyebrow", play);
-  h("h1", "tn-lobby-display tn-play-display", play).innerHTML = "Rule the<br>island.";
+  const displayH1 = h("h1", "tn-lobby-display tn-play-display", play);
+  displayH1.innerHTML = activeMapId() === "sunburst-canyon" ? "Rule the<br>canyon." : "Rule the<br>island.";
   const codeRow = h("div", "tn-play-coderow", play);
   const codeBig = h("div", "tn-title tn-play-roomcode", codeRow);
   const btnCopy = h("button", "tn-play-link", codeRow); btnCopy.type = "button";
   const modeLine = h("p", "tn-play-modeline", play);
+  // Map Selector Cards (Kong Island / Sunburst Canyon) — visible in dev & playtest builds
+  const mapPicker = h("div", "tn-map-picker", play);
+  mapPicker.setAttribute("role", "radiogroup"); mapPicker.setAttribute("aria-label", "Map");
+  const curMap = activeMapId();
+  const mapBtns: HTMLButtonElement[] = [];
+  for (const m of MAPS) {
+    const b = h("button", "tn-map-card" + (m.id === curMap ? " is-on" : ""), mapPicker);
+    b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", String(m.id === curMap));
+    b.tabIndex = m.id === curMap ? 0 : -1;
+    b.innerHTML = `<img src="${uiAsset(m.thumb)}" alt="" loading="eager"/><span class="mp-tag">${m.id === curMap ? "ACTIVE" : (m.id === "sunburst-canyon" ? "NEW" : "CLASSIC")}</span><span class="mp-name">${m.name}</span><span class="mp-sub">${m.subtitle}</span>`;
+    b.addEventListener("click", () => { if (m.id !== activeMapId()) switchMapAndReload(m.id); });
+    mapBtns.push(b);
+  }
   const choices = h("div", "tn-play-choices", play);
   const modes = h("div", "tn-play-modes", choices); modes.setAttribute("role", "radiogroup"); modes.setAttribute("aria-label", "Squad size");
   const modeBtn = (m: Mode, label: string) => { const b = h("button", "tn-pill", modes); b.type = "button"; b.setAttribute("role", "radio"); b.textContent = label; b.dataset.v = m; return b; };
@@ -360,7 +395,7 @@ export function createLobby(actions: LobbyActions): LobbyScreen {
   function paintDifficulty() { diffBtns.forEach((b, d) => { const on = d === difficulty; b.classList.toggle("is-on", on); b.setAttribute("aria-checked", String(on)); b.tabIndex = on ? 0 : -1; }); }
   function setDifficulty(d: BotDifficulty) { difficulty = d; store.set(DIFF_KEY, d); paintDifficulty(); actions.setDifficulty?.(d); }
   // radio groups: arrows move the choice (Tab enters / leaves the group on its chosen pill)
-  for (const g of [modes, seg, hatRow, topRow, shortRow]) g.addEventListener("keydown", (ev) => {
+  for (const g of [mapPicker, modes, seg, hatRow, topRow, shortRow]) g.addEventListener("keydown", (ev) => {
     const dir = ev.key === "ArrowRight" || ev.key === "ArrowDown" ? 1 : ev.key === "ArrowLeft" || ev.key === "ArrowUp" ? -1 : 0;
     if (!dir) return;
     const list = [...g.querySelectorAll<HTMLButtonElement>("button:not([disabled])")], i = list.indexOf(document.activeElement as HTMLButtonElement);
@@ -535,7 +570,7 @@ export function createLobby(actions: LobbyActions): LobbyScreen {
 
     // eyebrow + headline
     eyebrow.textContent = ui === "room" ? (s.isHost ? "Private lobby · You're the host" : "Private lobby · The host picks the mode")
-      : ui === "invite" ? "You're invited" : "Battle royale";
+      : ui === "invite" ? "You're invited" : `Battle royale · ${activeMapInfo().name}`;
     if (inRoom) codeBig.textContent = s.code!;
     inviteUrl = s.inviteUrl; btnCopy.hidden = !s.inviteUrl;
     paintModeLine();
@@ -551,7 +586,7 @@ export function createLobby(actions: LobbyActions): LobbyScreen {
     else setCta("Play", true, false, PLAYTEST ? "" : "vs bots");
 
     // controls that need the connection idle
-    for (const b of [btnCreate, btnJoin, btnRange, tileRange, btnSolo, btnTrios, ...diffBtns.values()]) b.disabled = s.busy;
+    for (const b of [btnCreate, btnJoin, btnRange, tileRange, btnSolo, btnTrios, ...diffBtns.values(), ...mapBtns]) b.disabled = s.busy;
     if (inRoom) for (const b of [btnSolo, btnTrios]) b.disabled = s.busy || !s.isHost;
     btnLeave.disabled = s.busy;
     btnCreate.textContent = s.busy ? "Connecting…" : "Create lobby";

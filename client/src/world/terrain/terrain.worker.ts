@@ -9,11 +9,12 @@
 //   "rocks": the same file + the page's rock keep-outs → terrainRocks (cloned)
 // The page falls back to its in-thread path when anything here fails.
 import { decodeTerrainFile, lavaChannels, terrainRocks, type RockKeep } from "../../../../shared/world/terrain-gen";
+import { setActiveMap, type MapId } from "../../../../shared/world/maps";
 import { computeGpuRows, finishGpuArrays } from "./data";
 
 type Band = { i0: number; i1: number; data: Uint8Array; info: Uint8Array; W: Float32Array[] };
-type Msg = { kind: "tex"; urls: string[][]; ao: number[]; size: number } | { kind: "rocks"; url: string; keep: RockKeep[] | undefined }
-  | { kind: "band"; url: string; i0: number; i1: number } | { kind: "finish"; url: string } | { kind: "bands"; bands: Band[] };
+type Msg = { kind: "tex"; urls: string[][]; ao: number[]; size: number } | { kind: "rocks"; url: string; mapId?: MapId; keep: RockKeep[] | undefined }
+  | { kind: "band"; url: string; mapId?: MapId; i0: number; i1: number } | { kind: "finish"; url: string; mapId?: MapId } | { kind: "bands"; bands: Band[] };
 let finishTd: Promise<ReturnType<typeof decodeTerrainFile>> | null = null;
 async function load(url: string) {
   const r = await fetch(url, { cache: "no-cache" });
@@ -47,13 +48,16 @@ self.onmessage = async (ev: MessageEvent<Msg>) => {
       }
       post({ ok: true, kind: "tex", alb, nor, ms: Math.round(performance.now() - t0) }, [alb.buffer, nor.buffer]);
     } else if (m.kind === "rocks") {
+      if (m.mapId) setActiveMap(m.mapId);
       const td = await load(m.url); td.keep = m.keep;
       const rocks = terrainRocks(td); post({ ok: true, kind: "rocks", hash: td.hash, rocks, ms: Math.round(performance.now() - t0) });
     } else if (m.kind === "band") {
+      if (m.mapId) setActiveMap(m.mapId);
       const td = await load(m.url);
       const r = computeGpuRows(td, lavaChannels(td), m.i0, m.i1);
       post({ ok: true, kind: "band", hash: td.hash, i0: m.i0, i1: m.i1, data: r.data, info: r.info, W: r.W, ms: Math.round(performance.now() - t0) }, [r.data.buffer, r.info.buffer, ...r.W.map((a) => a.buffer)]);
     } else if (m.kind === "finish") {
+      if (m.mapId) setActiveMap(m.mapId);
       finishTd = load(m.url); await finishTd;   // decode now, wait for the bands
     } else if (m.kind === "bands") {
       const td = await finishTd!; const res = td.res, N = res * res;

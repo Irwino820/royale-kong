@@ -60,7 +60,7 @@ export function bakeFieldData(H: Float32Array, biome: Uint8Array, res: number, c
   const sampleX = (j: number) => -half + j * cell, sampleZ = (i: number) => -half + i * cell;
   const land = new Uint8Array(n), water = new Uint8Array(n), lagoon = new Uint8Array(n);
   // lagoon = Biome.Lagoon cells, or (if the generator does not tag them) water inside the lagoon POIs' circles
-  const lagoonPois = POIS.filter((p) => p.id === "stilt-town" || p.id === "the-murk");
+  const lagoonPois = POIS.filter((p) => p.id === "stilt-town" || p.id === "the-murk" || p.id === "emerald-oasis");
   for (let i = 0; i < n; i++) {
     land[i] = H[i] >= WORLD.SEA_LEVEL ? 1 : 0;
     water[i] = land[i] ? 0 : 1;

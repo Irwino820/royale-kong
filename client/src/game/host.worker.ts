@@ -5,6 +5,7 @@
 // without the flag. Everything the link sends the page (JSON and binary frames, in order) leaves in one message per
 // task, at the end of the task (a microtask), with the binary buffers transferred. Page side: ./host-worker.ts.
 import { decodeTerrainFile } from "../../../shared/world/terrain-gen";
+import { setActiveMap } from "../../../shared/world/maps";
 import { Terrain } from "../../../shared/world/terrain";
 import { buildStaticWorld } from "../../../shared/sim/static-world";
 import { lootSpots } from "../../../shared/sim/loot-spots";
@@ -68,6 +69,7 @@ self.onmessage = async (ev: MessageEvent<ToHost>) => {
   if (d.k === "build") {
     try {
       const t0 = performance.now();
+      if (d.mapId) setActiveMap(d.mapId);
       const r = await fetch(d.url, { cache: "no-cache" });
       if (!r.ok) throw new Error(`island.bin ${r.status}`);
       const td = decodeTerrainFile(await r.arrayBuffer());

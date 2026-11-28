@@ -145,6 +145,7 @@ export function audioCategory(): Category {
       slider("ui", "Interface & confirmations", 0, 1, 0.01, pct, () => MIX("Interface & confirmations", ["Menus, hit confirmations and match cues."])),
       slider("ambience", "Island ambience", 0, 1, 0.01, pct, () => MIX("Island ambience", ["Environmental beds and ambient details."])),
       slider("radio", "Tuk-tuk radio", 0, 1, 0.01, pct, () => MIX("Tuk-tuk radio", ["KONG FM 99.8 in the tuk-tuk, and other tuk-tuks' radios nearby."])),
+      slider("music", "Lobby music", 0, 1, 0.01, pct, () => MIX("Lobby music", ["Tropical jungle theme playing in the lobby and wardrobe. Dips while previewing dances and fades out when a match starts."])),
       { kind: "seg", id: "dynamicRange", label: "Dynamic range", options: () => [{ v: "full", label: "Full" }, { v: "reduced", label: "Reduced" }],
         get: () => preferences.value.dynamicRange, set: (v) => preferences.set({ dynamicRange: v === "reduced" ? "reduced" : "full" }),
         help: () => MIX("Dynamic range", ["Full preserves the authored impact. Reduced lowers louder events for quieter listening; adjust master volume to suit your room."]) },

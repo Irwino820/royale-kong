@@ -7,12 +7,15 @@ import type { Box } from "../world/colliders";
 import type { VegInstance } from "../world/veg-scatter";
 import type { Climb } from "./climb";
 import { poiLadders, landingBoxes } from "../pois/ladders";
+import { sunburstLadders } from "../pois/sunburst/index";
+import { isSunburst } from "../world/maps";
 import { pickClimbTrees, treeClimb, perchFor, perchBoxes } from "../pois/climb-trees";
 import { StaticWorld } from "./world";
 import { PLAYER_H, PLAYER_R } from "./const";
 import * as dmath from "./dmath";
 
 export function buildClimbs(terrain: Terrain, plants: VegInstance[] = [], boxes: Box[] = []): { climbs: Climb[]; boxes: Box[] } {
+  if (isSunburst()) return { climbs: sunburstLadders(), boxes: [] };
   // the cliff landings between ladders (Mist Falls) collide like the perches: in the boxes and the hash
   const climbs: Climb[] = poiLadders(), out: Box[] = landingBoxes();
   const picks = pickClimbTrees(plants, terrain);

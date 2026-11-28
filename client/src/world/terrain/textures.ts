@@ -8,8 +8,9 @@ import { assetUrl } from "../../engine/assets";
 import { releaseAfterUpload } from "../../engine/texture-release";
 import { contextEpoch } from "../../engine/res/restore";
 
-import { LAYERS } from "./layers";
-export { LAYERS, LAYER_COUNT, layerIndex, type Layer } from "./layers";
+import { activeLayers } from "./layers";
+import { activeMapInfo } from "../../../../shared/world/maps";
+export { LAYERS, LAYER_COUNT, layerIndex, activeLayers, type Layer } from "./layers";
 const SIZE = 1024;
 
 export interface LayerArrays { albedo: THREE.DataArrayTexture; normal: THREE.DataArrayTexture }
@@ -30,18 +31,20 @@ function composedFor(epoch: number) {
 }
 
 async function composeLayers(): Promise<{ alb: Uint8Array; nor: Uint8Array }> {
-  const n = LAYERS.length, px = SIZE * SIZE * 4;
+  const LSET = activeLayers();
+  const n = LSET.length, px = SIZE * SIZE * 4;
   const alb = new Uint8Array(px * n), nor = new Uint8Array(px * n);
   const cv = document.createElement("canvas"); cv.width = SIZE; cv.height = SIZE;
   const g = cv.getContext("2d", { willReadFrequently: true })!;
   const read = (im: HTMLImageElement) => { g.clearRect(0, 0, SIZE, SIZE); g.drawImage(im, 0, 0, SIZE, SIZE); return g.getImageData(0, 0, SIZE, SIZE).data; };
-  const images = await Promise.all(LAYERS.map(async (L) => {
-    const base = assetUrl(`assets/terrain/tex3/${L.id}/`);
+  const texDir = activeMapInfo().texDir;
+  const images = await Promise.all(LSET.map(async (L) => {
+    const base = assetUrl(`${texDir}/${L.id}/`);
     return Promise.all([loadImage(base + "diff.webp"), loadImage(base + "nor.webp"), loadImage(base + "arm.webp")]);
   }));
   images.forEach(([d, nm, arm], li) => {
     const dd = read(d); const oa = alb.subarray(li * px, (li + 1) * px);
-    const ad = read(arm), aoK = LAYERS[li].ao;
+    const ad = read(arm), aoK = LSET[li].ao;
     for (let i = 0; i < px; i += 4) {
       const ao = 1 - aoK + aoK * (ad[i] / 255);
       oa[i] = dd[i] * ao; oa[i + 1] = dd[i + 1] * ao; oa[i + 2] = dd[i + 2] * ao; oa[i + 3] = ad[i + 2];   // a = height
@@ -53,11 +56,13 @@ async function composeLayers(): Promise<{ alb: Uint8Array; nor: Uint8Array }> {
 }
 /** layer URLs [diff, nor, arm] + AO weights (the worker composes the same arrays off the main thread) */
 export function layerSources(): { urls: string[][]; ao: number[]; size: number } {
-  return { urls: LAYERS.map((L) => { const base = new URL(assetUrl(`assets/terrain/tex3/${L.id}/`), location.href).href; return [base + "diff.webp", base + "nor.webp", base + "arm.webp"]; }), ao: LAYERS.map((L) => L.ao), size: SIZE };
+  const LSET = activeLayers();
+  const texDir = activeMapInfo().texDir;
+  return { urls: LSET.map((L) => { const base = new URL(assetUrl(`${texDir}/${L.id}/`), location.href).href; return [base + "diff.webp", base + "nor.webp", base + "arm.webp"]; }), ao: LSET.map((L) => L.ao), size: SIZE };
 }
 /** the two array textures from composed RGBA arrays (albedo·AO + height, normal + roughness) */
 export function layerArraysFrom(alb: Uint8Array | null, nor: Uint8Array | null, maxAniso: number): LayerArrays {
-  const n = LAYERS.length;
+  const n = activeLayers().length;
   const mk = (data: Uint8Array | null, srgb: boolean, key: "alb" | "nor") => {
     const t = new THREE.DataArrayTexture(data, SIZE, SIZE, n);
     t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;

@@ -84,9 +84,15 @@ function findSpot(rng: Rng, world: StaticWorld, cx: number, cz: number, r: numbe
   return null;
 }
 
-/** designed spots, resolved once (the POI modules compute them at import) */
+import { activeMapId } from "../world/maps";
+/** designed spots, resolved per active map */
 let SPOTS: Record<string, LootSpots> | null = null;
-export function designedLoot(): Record<string, LootSpots> { return SPOTS ??= lootSpotsById(); }
+let SPOTS_MAP = "";
+export function designedLoot(): Record<string, LootSpots> {
+  const m = activeMapId();
+  if (!SPOTS || SPOTS_MAP !== m) { SPOTS_MAP = m; SPOTS = lootSpotsById(); }
+  return SPOTS;
+}
 
 /** a live weapon source must be this close (sprint-time estimate) to every coverage probe; the probes sit ≤ 8 m from any
  * landing point, so the 10 s promise keeps ~2.5 s of slack for detours (a tighter 8.6 s cover lit a chest or a floor

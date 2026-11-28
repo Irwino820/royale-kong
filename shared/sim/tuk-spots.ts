@@ -4,6 +4,8 @@
 // to it — on the paving or a dirt road when there is one about, nose down the road (shared/sim/vehicle.ts findParking:
 // the open sky over it, both collision circles clear, room to pull out), so a POI whose layout moves keeps its taxi. Deterministic and built once per world.
 import { POIS, type PoiId } from "../world/map";
+import { isSunburst } from "../world/maps";
+import { SUNBURST_TUK_RANKS } from "../pois/sunburst/index";
 import * as islet from "../pois/lobby-islet";
 import { sw } from "../pois/peel-strip";
 import { RANGE_LINE_X, RANGE_YAW_DOWNRANGE } from "./range";
@@ -41,13 +43,19 @@ function build(world: StaticWorld) {
     into.push({ x: OUT[0], z: OUT[1], yaw: OUT[2], poi }); taken.push([OUT[0], OUT[1]]);
   };
   c = { ranks: [], islet: [], range: [] };
-  for (const [id, dx, dz, hint, pull = ROAD_PULL] of TUK_RANKS) { const i = POIS.findIndex((p) => p.id === id), P = POIS[i]; park(P.x + dx, P.z + dz, hint, i, 45, c.ranks, pull); }
+  const ranks = isSunburst() ? SUNBURST_TUK_RANKS : TUK_RANKS;
+  for (const [id, dx, dz, hint, pull = ROAD_PULL] of ranks) {
+    const i = POIS.findIndex((p) => p.id === id);
+    if (i < 0) continue;
+    const P = POIS[i];
+    park(P.x + dx, P.z + dz, hint, i, 45, c.ranks, pull);
+  }
   // the warm-up islet: two to play with while the plane is fuelled
   const li = POIS.findIndex((p) => p.id === "lobby-islet");
-  for (const [lx, d] of [[-16, 24], [15, 30]]) { const [x, z] = islet.toWorld(lx, d); park(x, z, islet.worldYaw(0), li, 18, c.islet); }
-  // the firing range: beside the rack, nose down the runway
+  if (li >= 0) for (const [lx, d] of [[-16, 24], [15, 30]]) { const [x, z] = islet.toWorld(lx, d); park(x, z, islet.worldYaw(0), li, 18, c.islet); }
+  // the firing range: beside the rack, nose down the runway (Kong Island Peel Strip only)
   const ps = POIS.findIndex((p) => p.id === "peel-strip");
-  for (const lz of [-14, 16]) { const [x, , z] = sw(RANGE_LINE_X - 3, lz); park(x, z, RANGE_YAW_DOWNRANGE, ps, 14, c.range); }
+  if (ps >= 0) for (const lz of [-14, 16]) { const [x, , z] = sw(RANGE_LINE_X - 3, lz); park(x, z, RANGE_YAW_DOWNRANGE, ps, 14, c.range); }
   CACHE.set(world, c);
   return c;
 }

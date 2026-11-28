@@ -2,6 +2,8 @@
 // the Match owns an Economy; the client only shows what the inventory frame / events / match info carry and sends a
 // purchase request (INV.Buy). Deterministic like the rest of the sim (the match RNG, the static world).
 import { CONSUMABLES, POIS, WEAPONS } from "../world/map";
+import { isSunburst } from "../world/maps";
+import { SUNBURST_STAND_SPOTS } from "../pois/sunburst/index";
 import { AMMO_PICKUP, CONSUMABLE_DEFS, ECON, PLAYER_R, WEAPON_DEFS } from "./const";
 export { ECON };
 import { lootSpots, SpotKind } from "./loot-spots";
@@ -48,9 +50,37 @@ let STANDS: { world: StaticWorld; list: Stand[] } | null = null;
 export function bananaStands(world: StaticWorld): Stand[] {
   if (STANDS && STANDS.world === world) return STANDS.list;
   const set = lootSpots(world), list: Stand[] = [];
+  const sunburst = isSunburst();
   for (let pi = 0; pi < POIS.length; pi++) {
     const P = POIS[pi]; if (P.id === "lobby-islet") continue;
-    const cands = set.spots.filter((s) => s.poi === pi && s.kind === SpotKind.Floor && s.room < 0 && s.bld < 0).sort((a, b) => dmath.hypot(a.x - P.x, a.z - P.z) - dmath.hypot(b.x - P.x, b.z - P.z));
+    // Sunburst Canyon: place each POI's Banana Stand at its curated ground-level courtyard/plaza spot first so it never
+    // perches atop unclimbable landmarks (golden pyramid apex, fossil skull, bastion roof, or narrow oasis bridge).
+    if (sunburst) {
+      const pref = SUNBURST_STAND_SPOTS[P.id];
+      if (pref) {
+        const bx = P.x + pref[0], bz = P.z + pref[1], byaw = pref[2];
+        const rings = [0, 2.5, 5, 8];
+        let placed = false;
+        for (const r of rings) {
+          const steps = r === 0 ? 1 : 8;
+          for (let k = 0; k < steps; k++) {
+            const a = (k / steps) * Math.PI * 2;
+            const x = bx + dmath.cos(a) * r, z = bz + dmath.sin(a) * r;
+            const gh = world.terrain.height(x, z);
+            const y = standFits(world, x, gh, z, byaw);
+            if (y !== y || Math.abs(y - gh) > 2.2) continue;
+            if (set.spots.some((q) => Math.abs(q.x - x) < 2.4 && Math.abs(q.z - z) < 2.4 && Math.abs(q.y - y) < 3)) continue;
+            list.push({ x: +x.toFixed(3), y: +y.toFixed(3), z: +z.toFixed(3), yaw: +byaw.toFixed(4), poi: pi });
+            placed = true; break;
+          }
+          if (placed) break;
+        }
+        if (placed) continue;
+      }
+    }
+    const cands = set.spots
+      .filter((s) => s.poi === pi && s.kind === SpotKind.Floor && s.room < 0 && s.bld < 0 && (!sunburst || Math.abs(s.y - world.terrain.height(s.x, s.z)) < 2.5))
+      .sort((a, b) => dmath.hypot(a.x - P.x, a.z - P.z) - dmath.hypot(b.x - P.x, b.z - P.z));
     for (const c of cands) {
       // stand 2.2 m off the floor spot (its item stays clear of the counter), toward the POI centre
       const d = dmath.hypot(P.x - c.x, P.z - c.z) || 1, ux = (P.x - c.x) / d, uz = (P.z - c.z) / d;

@@ -23,6 +23,8 @@ type Flag = { readonly kind: Kind<unknown>; readonly owner: Owner; readonly rout
 const FLAGS = {
   /** show the display-preset toasts to automated browsers too */
   announce: { kind: present, owner: "boot" },
+  /** map / island to load: kong (default) or sunburst (Sunburst Canyon desert island) */
+  arena: { kind: text, owner: "boot", routing: true },
   /** first-person arms: =2 the v2 arms, =1 the current ones; absent = localStorage kr.arms */
   arms: { kind: text, owner: "weapons" },
   /** keep every hand mesh so a bench can swap v1 and v2 arms live */

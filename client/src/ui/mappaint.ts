@@ -4,6 +4,7 @@
 // the POI colliders (every building/container/crate becomes a roof with a height-scaled shadow). Runs in a worker
 // (mapworker.ts) with OffscreenCanvas, or on the main thread as a fallback.
 import { Biome } from "../../../shared/world/map";
+import { isSunburst } from "../../../shared/world/maps";
 import { Terrain } from "../../../shared/world/terrain";
 import type { Box } from "../../../shared/world/colliders";
 
@@ -65,6 +66,21 @@ function paintBase(t: Terrain, coast: Int8Array | null, path: Uint8Array | null,
   const g = c.getContext("2d") as Ctx2D;
   const img = g.createImageData(R, R);
   const px = img.data;
+  const desert = isSunburst();
+  // Desert palette overrides when rendering Sunburst Canyon top-down map
+  const D_SAND: RGB = [238, 198, 126];
+  const D_SAND_WET: RGB = [204, 162, 100];
+  const D_SCRUB: RGB = [214, 166, 102];
+  const D_SCRUB_HI: RGB = [232, 188, 122];
+  const D_OASIS: RGB = [74, 148, 56];
+  const D_OASIS_HI: RGB = [110, 178, 72];
+  const D_REDROCK: RGB = [184, 96, 58];
+  const D_REDROCK_HI: RGB = [218, 132, 82];
+  const D_REDROCK_DK: RGB = [122, 54, 34];
+  const D_CAPROCK: RGB = [144, 68, 44];
+  const D_PLAZA: RGB = [224, 194, 140];
+  const D_WASH: RGB = [212, 182, 134];
+  const D_TRAIL: RGB = [180, 118, 68];
   // sun from the NW, high (matches the in-game sun side on the render)
   const lx = -0.55, ly = 0.62, lz = -0.56;
   const at = (i: number, j: number) => H[Math.min(R - 1, Math.max(0, i)) * R + Math.min(R - 1, Math.max(0, j))];
@@ -111,6 +127,30 @@ function paintBase(t: Terrain, coast: Int8Array | null, path: Uint8Array | null,
         // concavity (valleys darker, ridges lighter) from a 4-sample ring at 6 m
         const ring = (at(i - 3, j) + at(i + 3, j) + at(i, j - 3) + at(i, j + 3)) * 0.25;
         const cav = Math.max(-1, Math.min(1, (h - ring) * 0.35));
+        if (desert) {
+          switch (b) {
+            case Biome.Beach: col = mix(D_SAND_WET, D_SAND, smooth(0.2, 1.8, h) * (0.85 + n2 * 0.15)); break;
+            case Biome.Grass: col = mix(D_SCRUB, D_SCRUB_HI, n1); break;
+            case Biome.Jungle: col = mix(D_OASIS, D_OASIS_HI, n1); break;
+            case Biome.Rock: col = mix(D_REDROCK, D_REDROCK_HI, n1 * 0.65); break;
+            case Biome.Cinder: col = mix(D_CAPROCK, D_REDROCK, n1 * 0.6); break;
+            case Biome.Path: col = D_TRAIL; break;
+            case Biome.Farmland: col = mix(D_PLAZA, D_SAND, n2 * 0.25); break;
+            case Biome.Paved: col = mix(D_PLAZA, [186, 168, 142], 0.45); break;
+            case Biome.Lagoon: col = mix(D_WASH, D_SAND, n1 * 0.4); break;
+            default: col = mix(D_SAND, D_SCRUB, n1);
+          }
+          const cliff = smooth(0.55, 1.25, slope);
+          if (cliff > 0) {
+            const strata = Math.sin(h * 1.1 + n1 * 4) * 0.5 + 0.5;
+            const rock = mix(mix(D_REDROCK_DK, D_REDROCK, strata), D_REDROCK_HI, Math.max(0, n2 - 0.55) * 1.4);
+            col = mix(col, rock, cliff * 0.94);
+          }
+          if (path && path[k] > 8 && b !== Biome.Farmland) col = mix(col, D_TRAIL, smooth(8, 150, path[k]) * 0.85);
+          const shade = 0.68 + lit * 0.46 + cav * 0.14;
+          col = [col[0] * shade, col[1] * shade, col[2] * shade];
+          if (cd >= 0 && cd < 3 && b !== Biome.Paved) col = mix(col, D_SAND_WET, (1 - cd / 3) * 0.48);
+        } else {
         switch (b) {
           case Biome.Beach: col = mix(SAND_WET, SAND, smooth(0.2, 1.6, h) * (0.85 + n2 * 0.15)); break;
           case Biome.Grass: col = mix(GRASS, GRASS_HI, n1); break;
@@ -139,6 +179,7 @@ function paintBase(t: Terrain, coast: Int8Array | null, path: Uint8Array | null,
         col = [col[0] * shade, col[1] * shade, col[2] * shade];
         // warm rim of dry sand right above the waterline, wet dark band just at it
         if (cd >= 0 && cd < 3 && b !== Biome.Paved) col = mix(col, SAND_WET, (1 - cd / 3) * 0.55);
+        }
       }
       const j2 = 1 + (n2 - 0.5) * 0.05;
       const o = k * 4;

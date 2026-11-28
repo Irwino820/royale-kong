@@ -16,6 +16,7 @@
 // renderer and the collision world MUST both pass the rock list (vegStaticColliders does) or the server gets ~200 extra
 // trunks buried in rocks (invisible pillars). POI collider volumes (allColliders()) are always applied — no caller input.
 import { Biome, POIS, WORLD, type Poi } from "./map";
+import { isSunburst } from "./maps";
 import type { Terrain } from "./terrain";
 import type { Box } from "./colliders";
 import { TERRAIN_CAMS, badlandsAt, terrainRocks, terrainRockColliders, type RockInstance, type TerrainData } from "./terrain-gen";
@@ -27,19 +28,21 @@ import * as dmath from "../sim/dmath";
 
 export type VegKind =
   | "palm" | "palm-leaning" | "jungle-tree" | "bush" | "fern" | "monstera" | "banana-plant" | "flowers" | "grass"
-  | "bamboo" | "mangrove" | "log" | "groundcover" | "vine" | "litter";
+  | "bamboo" | "mangrove" | "log" | "groundcover" | "vine" | "litter" | "cactus" | "prickly-pear";
 
-export const VEG_KINDS: VegKind[] = ["palm", "palm-leaning", "jungle-tree", "bush", "fern", "monstera", "banana-plant", "flowers", "grass", "bamboo", "mangrove", "log", "groundcover", "vine", "litter"];
+export const VEG_KINDS: VegKind[] = ["palm", "palm-leaning", "jungle-tree", "bush", "fern", "monstera", "banana-plant", "flowers", "grass", "bamboo", "mangrove", "log", "groundcover", "vine", "litter", "cactus", "prickly-pear"];
 
 /** number of geometry variants per kind (client builds this many; scatter picks one per instance) */
 export const VARIANTS: Record<VegKind, number> = {
   palm: 3, "palm-leaning": 3, "jungle-tree": 5, bush: 3, fern: 2, monstera: 2, "banana-plant": 2, flowers: 3, grass: 4, bamboo: 2, mangrove: 3, log: 2, groundcover: 4, vine: 2,
   // palm litter: 0 fallen coconuts, 1 a dry fallen frond, 2 a split husk + nut — decorative, no colliders
   litter: 3,
+  // Sunburst Canyon desert flora: 5 sculpted tall cacti (4 Saguaro forms + Organ Pipe candelabra) and 3 low succulents (Nopal, Golden Barrel, Agave)
+  cactus: 5, "prickly-pear": 3,
 };
 
 /** kinds with trunk colliders */
-export const COLLIDABLE: ReadonlySet<VegKind> = new Set<VegKind>(["palm", "palm-leaning", "jungle-tree", "mangrove", "bamboo", "log"]);
+export const COLLIDABLE: ReadonlySet<VegKind> = new Set<VegKind>(["palm", "palm-leaning", "jungle-tree", "mangrove", "bamboo", "log", "cactus"]);
 
 export type Clearing = { x: number; z: number; r: number } | { x: number; z: number; hx: number; hz: number; yaw?: number };
 
@@ -162,6 +165,118 @@ export function jungleTreeShape(variant: number): TreeShape {
   const wide = v === 3 ? 1.35 : v === 4 ? 0.8 : 1;
   const rx = (H * 0.42 + rnd() * 1.2) * wide, ry = (H * 0.25 + rnd() * 0.6) * (v === 3 ? 0.75 : v === 4 ? 1.25 : 1);
   return { H, trunkH, r0, pts, flanges, crownY: trunkH + H * 0.17, rx, ry };
+}
+
+export interface CactusArm {
+  /** height where the arm emerges from the main stem (m) */
+  y0: number;
+  /** horizontal direction around +Y (rad; 0 = +X, PI/2 = -Z) */
+  ang: number;
+  /** outward horizontal reach from stem center (m) */
+  reach: number;
+  /** slight organic downward dip at the elbow bend (m) */
+  dip: number;
+  /** vertical climb above y0 (m) */
+  rise: number;
+  /** arm base radius (m) */
+  r: number;
+}
+export interface CactusStem {
+  pts: Array<[number, number, number]>;
+  r0: number;
+}
+export interface CactusShape {
+  /** overall height (m), base radius (m), max horizontal arm reach (m) */
+  h: number;
+  r0: number;
+  reach: number;
+  /** main trunk polyline (pts[0] sunk -0.45 m for slope seating) */
+  pts: Array<[number, number, number]>;
+  /** sweeping elbow arms on Saguaro variants (0, 1, 2, 4) */
+  arms: CactusArm[];
+  /** clustered vertical stems on Organ Pipe variant (3) */
+  stems: CactusStem[];
+}
+
+/** Shared sculpted cactus silhouettes (5 variants): 0 Classic 2-Arm Saguaro, 1 Ancient 3-Arm Patriarch,
+ *  2 Lone-Arm Sentinel + Pup, 3 Organ Pipe Candelabra (5 stems), 4 Grand 4-Arm Monarch + Barrel. */
+export function cactusShape(variant: number): CactusShape {
+  const v = ((variant % 5) + 5) % 5;
+  const rnd = mulberry32(4111 + v * 43);
+  const mkStem = (h: number, leanX: number, leanZ: number, ox = 0, oz = 0): Array<[number, number, number]> => {
+    const out: Array<[number, number, number]> = [[ox, -0.45, oz]];
+    for (let i = 0; i <= 5; i++) {
+      const t = i / 5;
+      const curve = t * t * 0.65 + t * 0.35;
+      out.push([
+        ox + leanX * curve + dmath.sin(t * Math.PI) * (rnd() - 0.5) * 0.12,
+        h * t,
+        oz + leanZ * curve + dmath.sin(t * Math.PI) * (rnd() - 0.5) * 0.10,
+      ]);
+    }
+    return out;
+  };
+  if (v === 3) {
+    // Organ Pipe Candelabra: 5 gracefully curving fluted stems bursting upward from a shared base
+    const defs: Array<[number, number, number, number]> = [
+      [6.5, 0.0, 0.0, 0.25],
+      [5.7, 0.6, 0.92, 0.22],
+      [5.2, 2.15, 0.88, 0.21],
+      [4.8, 3.65, 0.94, 0.20],
+      [4.3, 5.15, 0.82, 0.19],
+    ];
+    const stems: CactusStem[] = defs.map(([sh, a, reach, r0], idx) => {
+      const dx = dmath.cos(a), dz = -dmath.sin(a);
+      const pts: Array<[number, number, number]> = idx === 0
+        ? mkStem(sh, 0.08, -0.05)
+        : [
+            [dx * 0.12, -0.45, dz * 0.12],
+            [dx * 0.26, 0.25, dz * 0.26],
+            [dx * (reach * 0.72), sh * 0.24, dz * (reach * 0.72)],
+            [dx * (reach * 0.96), sh * 0.55, dz * (reach * 0.96)],
+            [dx * reach, sh * 0.80, dz * reach],
+            [dx * (reach * 0.96), sh, dz * (reach * 0.96)],
+          ];
+      return { pts, r0 };
+    });
+    return { h: 6.5, r0: 0.42, reach: 1.25, pts: stems[0].pts, arms: [], stems };
+  }
+  if (v === 0) {
+    // Classic iconic Twin-Arm Saguaro
+    const h = 7.2, r0 = 0.36;
+    const arms: CactusArm[] = [
+      { y0: 2.35, ang: 0.15, reach: 1.22, dip: 0.24, rise: 2.95, r: 0.26 },
+      { y0: 3.35, ang: Math.PI - 0.22, reach: 1.15, dip: 0.20, rise: 2.65, r: 0.25 },
+    ];
+    return { h, r0, reach: 1.45, pts: mkStem(h, 0.14, -0.06), arms, stems: [] };
+  }
+  if (v === 1) {
+    // Ancient 3-Arm Hero Patriarch Saguaro
+    const h = 8.4, r0 = 0.42;
+    const arms: CactusArm[] = [
+      { y0: 2.5, ang: 0.3, reach: 1.42, dip: 0.28, rise: 3.65, r: 0.29 },
+      { y0: 3.45, ang: 2.45, reach: 1.32, dip: 0.24, rise: 3.15, r: 0.27 },
+      { y0: 4.55, ang: 4.45, reach: 1.18, dip: 0.18, rise: 2.45, r: 0.25 },
+    ];
+    return { h, r0, reach: 1.7, pts: mkStem(h, -0.18, 0.12), arms, stems: [] };
+  }
+  if (v === 2) {
+    // Sleek Lone-Arm Sentinel + Young Shoot
+    const h = 6.4, r0 = 0.33;
+    const arms: CactusArm[] = [
+      { y0: 2.6, ang: 0.55, reach: 1.18, dip: 0.22, rise: 2.55, r: 0.24 },
+    ];
+    return { h, r0, reach: 1.35, pts: mkStem(h, -0.22, -0.10), arms, stems: [] };
+  }
+  // v === 4: Grand 4-Arm Monarch Saguaro + Golden Barrel at foot
+  const h = 7.8, r0 = 0.40;
+  const arms: CactusArm[] = [
+    { y0: 2.2, ang: 0.0, reach: 1.35, dip: 0.26, rise: 3.25, r: 0.27 },
+    { y0: 2.95, ang: 1.65, reach: 1.24, dip: 0.22, rise: 2.85, r: 0.26 },
+    { y0: 3.7, ang: 3.25, reach: 1.28, dip: 0.22, rise: 2.95, r: 0.26 },
+    { y0: 4.6, ang: 4.85, reach: 1.05, dip: 0.16, rise: 2.05, r: 0.23 },
+  ];
+  return { h, r0, reach: 1.6, pts: mkStem(h, 0.10, 0.14), arms, stems: [] };
 }
 
 /** crown shape per jungle-tree silhouette: [width ×, height ×, centre lift × ry] of the shared rx / ry (client canopy.ts
@@ -1681,6 +1796,146 @@ const ROCKS_FOR = new WeakMap<Float32Array, RockIndex>();
 /** all big plants on the island (deterministic). `rocks` removes collidable plants buried in rock — pass it (the
  * renderer and vegStaticColliders do); without it the rocks registered for this terrain earlier are used, if any. */
 export function scatterVegetation(t: Terrain, clearings: Clearing[], rules: Rule[] = BIG_RULES, rocks?: RockInstance[] | RockIndex): VegInstance[] {
+  if (isSunburst() && rules === BIG_RULES) {
+    // Sunburst Canyon desert ecosystem: dense sculpted Saguaro & Organ Pipe cactus groves across dunes,
+    // scrubland, and red-rock mesas (matching Kong Island's forest density & visual rhythm), abundant flowering
+    // Prickly Pear / Golden Barrel / Agave succulents, desert scrub bushes, and lush date palms around Emerald Oasis.
+    const ri = rocks ? (rocks instanceof RockIndex ? rocks : new RockIndex(rocks)) : ROCKS_FOR.get(t.heights);
+    if (ri) ROCKS_FOR.set(t.heights, ri);
+    const out: VegInstance[] = [];
+    const gaps = new GapGrid(8);
+    const lowGaps = new GapGrid(5);
+    const rnd = mulberry32(4242 + 88);
+    const clumpN = new Simplex2(4242 + 313);
+    const clump2 = new Simplex2(4242 + 719);
+
+    // 1. Emerald Oasis date palms ringing the turquoise spring + coastal mirage beaches (placed first to reserve space)
+    for (let z = -900; z <= 1100; z += 10) {
+      for (let x = -900; x <= 900; x += 10) {
+        const px = x + (rnd() - 0.5) * 7.5, pz = z + (rnd() - 0.5) * 7.5;
+        const b = t.biomeAt(px, pz);
+        const y = t.height(px, pz);
+        if (y < 0.45 || slopeAt(t, px, pz) > 0.48) continue;
+        const oasisD = dmath.hypot(px, pz - 40);
+        const isOasis = b === Biome.Jungle || (oasisD > 56 && oasisD < 130);
+        const isShorePalm = b === Biome.Beach && y < 3.4 && rnd() < 0.12;
+        if (!isOasis && !isShorePalm) continue;
+        if (inClearing(px, pz, clearings) && !isOasis) continue;
+        if (isOasis && oasisD < 56) continue;
+        // Keep the 4 Emerald Oasis pier corridors cleanly clear of palm trunks
+        if (isOasis && oasisD < 74 && (Math.abs(px) < 5.8 || Math.abs(pz - 40) < 5.8)) continue;
+        if (!isOasis && nearestRoad(t, px, pz).d < 3.4) continue;
+        const kind: VegKind = rnd() < 0.45 ? "palm-leaning" : "palm";
+        if (gaps.tooClose(px, pz, 8.2)) continue;
+        const variant = Math.floor(rnd() * VARIANTS[kind]);
+        const yaw = rnd() * Math.PI * 2;
+        const sc = 0.85 + rnd() * 0.38;
+        if (inPoiVolume(kind, variant, px, y, pz, yaw, sc, false)) continue;
+        const q: VegInstance = { kind, variant, x: px, y, z: pz, yaw, scale: sc };
+        if (ri && buriedInRock(ri, q)) continue;
+        out.push(q);
+        gaps.add(px, pz);
+      }
+    }
+
+    // 2. Dense sculpted tall Saguaros & Organ Pipe Cacti across the entire desert island!
+    //    Multi-scale organic clumping creates rich Sonoran cactus forests, scenic canyon rim sentinels,
+    //    and natural sunlit dune avenues while strictly respecting roads, POIs, water, and steep cliff walls.
+    for (let z = -980; z <= 1080; z += 10.5) {
+      for (let x = -980; x <= 980; x += 10.5) {
+        const px = x + (rnd() - 0.5) * 9.2, pz = z + (rnd() - 0.5) * 9.2;
+        const y = t.height(px, pz);
+        if (y < 1.2) continue;
+        const sl = slopeAt(t, px, pz);
+        if (sl > 0.66) continue;
+        const b = t.biomeAt(px, pz);
+        if (b === Biome.Jungle || b === Biome.Lagoon || b === Biome.Path || b === Biome.Farmland || b === Biome.Paved) continue;
+        const oasisD = dmath.hypot(px, pz - 40);
+        if (oasisD < 134) continue;
+        if (inClearing(px, pz, clearings)) continue;
+        if (nearestRoad(t, px, pz).d < 3.4) continue;
+
+        // Organic desert grove density modulated by Simplex2 noise so cacti form natural clusters & clearings
+        const n1 = clumpN.fbm(px / 110, pz / 110, 2); // ~ -0.7..+0.7
+        const n2 = clump2.noise(px / 44, pz / 44);
+        const grove = 0.5 + 0.45 * n1 + 0.20 * n2;
+        let prob = 0;
+        let minGap = 7.4;
+        if (b === Biome.Grass) {
+          // Desert scrub flats & valleys: richest Sonoran Saguaro forests!
+          prob = 0.52 + grove * 0.42;
+          minGap = 6.6;
+        } else if (b === Biome.Beach) {
+          // Golden wind-rippled dunes: strong natural cactus stands with scenic sand sweeps between
+          prob = y < 3.0 ? 0.16 : 0.28 + grove * 0.42;
+          minGap = 7.8;
+        } else if (b === Biome.Rock || b === Biome.Cinder) {
+          // Red-rock foothills, mesa rims & alkali flats: iconic tall sentinels & Organ Pipes
+          prob = sl > 0.48 ? 0.22 : 0.34 + grove * 0.36;
+          minGap = 7.6;
+        }
+        if (rnd() > prob) continue;
+        if (gaps.tooClose(px, pz, minGap)) continue;
+
+        // Biome-flavored variant weighting: rocky slopes favor Organ Pipe (v3) & Patriarchs (v1)
+        let variant: number;
+        const rv = rnd();
+        if (b === Biome.Rock || b === Biome.Cinder) {
+          variant = rv < 0.34 ? 3 : rv < 0.60 ? 1 : rv < 0.80 ? 0 : rv < 0.92 ? 4 : 2;
+        } else {
+          variant = rv < 0.28 ? 0 : rv < 0.50 ? 1 : rv < 0.70 ? 2 : rv < 0.86 ? 3 : 4;
+        }
+        const yaw = rnd() * Math.PI * 2;
+        const sc = 0.76 + rnd() * 0.56;
+        if (inPoiVolume("cactus", variant, px, y, pz, yaw, sc, false)) continue;
+        const q: VegInstance = { kind: "cactus", variant, x: px, y: y - 0.06, z: pz, yaw, scale: sc };
+        if (ri && buriedInRock(ri, q)) continue;
+        out.push(q);
+        gaps.add(px, pz);
+      }
+    }
+
+    // 3. Abundant low desert flora: flowering Prickly Pear (Nopal), Golden Barrel Clusters, Desert Agave, and Scrub Bushes!
+    //    Populates around cactus groves, rocky foothills, dune troughs, and scrubland for rich layered silhouette depth.
+    for (let z = -960; z <= 1060; z += 9.5) {
+      for (let x = -960; x <= 960; x += 9.5) {
+        const px = x + (rnd() - 0.5) * 8.4, pz = z + (rnd() - 0.5) * 8.4;
+        const y = t.height(px, pz);
+        if (y < 1.1) continue;
+        const sl = slopeAt(t, px, pz);
+        if (sl > 0.72) continue;
+        const b = t.biomeAt(px, pz);
+        if (b === Biome.Lagoon || b === Biome.Path || b === Biome.Farmland || b === Biome.Paved) continue;
+        const oasisD = dmath.hypot(px, pz - 40);
+        if (oasisD < 118) continue;
+        if (inClearing(px, pz, clearings)) continue;
+        if (nearestRoad(t, px, pz).d < 2.2) continue;
+        if (lowGaps.tooClose(px, pz, 4.2)) continue;
+
+        const gVal = 0.5 + 0.5 * clump2.fbm(px / 70, pz / 70, 2);
+        const isScrub = b === Biome.Grass;
+        const isRocky = b === Biome.Rock || b === Biome.Cinder;
+        const chance = isScrub ? 0.42 + gVal * 0.30 : isRocky ? 0.34 + gVal * 0.28 : 0.22 + gVal * 0.26;
+        if (rnd() > chance) continue;
+
+        // 76% sculpted desert succulents (Nopal / Golden Barrel / Agave), 24% hardy desert scrub bushes
+        const useBush = isScrub && rnd() < 0.26;
+        const kind: VegKind = useBush ? "bush" : "prickly-pear";
+        const variant = useBush
+          ? Math.floor(rnd() * VARIANTS.bush)
+          : isRocky
+            ? (rnd() < 0.42 ? 1 : rnd() < 0.76 ? 2 : 0) // Rocky slopes love Golden Barrels & Agave!
+            : (rnd() < 0.46 ? 0 : rnd() < 0.76 ? 1 : 2); // Dunes & scrub love flowering Nopal & Barrels!
+        const yaw = rnd() * Math.PI * 2;
+        const sc = useBush ? 0.62 + rnd() * 0.45 : 0.78 + rnd() * 0.52;
+        if (inPoiVolume(kind, variant, px, y, pz, yaw, sc, false)) continue;
+        const q: VegInstance = { kind, variant, x: px, y: y - 0.04, z: pz, yaw, scale: sc };
+        out.push(q);
+        lowGaps.add(px, pz);
+      }
+    }
+    return out;
+  }
   let out: VegInstance[] = [];
   const gaps = new GapGrid(8);
   const noise = new Simplex2(WORLD.SEED + 101);
@@ -2023,6 +2278,14 @@ export function detailCell(t: Terrain, clearings: Clearing[], cx: number, cz: nu
   const n = noise ?? new Simplex2(WORLD.SEED + 101);
   const x0 = cx * DETAIL_CELL, z0 = cz * DETAIL_CELL;
   rules.forEach((rule, i) => runRule(t, rule, clearings, gaps, n, out, [x0, z0, x0 + DETAIL_CELL, z0 + DETAIL_CELL], 100 + i, env));
+  if (isSunburst()) {
+    // Only lush grass/flowers in the Emerald Oasis (Biome.Jungle) + sparse dry desert grass tufts in Biome.Grass
+    return out.filter((p, idx) => {
+      const b = t.biomeAt(p.x, p.z);
+      if (b === Biome.Jungle) return true;
+      return b === Biome.Grass && p.kind === "grass" && (idx & 3) === 0;
+    });
+  }
   return out;
 }
 
@@ -2179,6 +2442,14 @@ export function vegTrunkColliders(instances: VegInstance[]): Box[] {
           const r = s.R * (1 - 0.12 * ((k + 0.5) / n)) * S;
           out.push({ c: [p.x + ax * u, p.y + r * 0.78, p.z + az * u], h: [r * 0.95, r * 0.85, r * 0.95], surf: "wood" });
         }
+        break;
+      }
+      case "cactus": {
+        // Shared trunk collider matching cactusShape() 1:1 — bullets & movement collide with every desert Saguaro / Organ Pipe!
+        const s = cached(`cactus:${p.variant % 5}`, () => cactusShape(p.variant % 5));
+        const r = (p.variant % 5 === 3 ? 0.62 : s.r0 * 1.05) * S;
+        const hh = s.h * 0.48 * S;
+        out.push({ c: [p.x, p.y + hh, p.z], h: [r, hh, r], surf: "wood", round: [p.x, p.z] });
         break;
       }
       default: break;

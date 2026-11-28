@@ -17,6 +17,7 @@ import { loadPlayerOutfit, outfitFor } from "../actors/outfit-pick";
 import type { GliderProps } from "../actors/glider";
 import type { PlaneProps } from "../actors/plane";
 import { resources } from "../engine/res/scope";
+import { isSunburst } from "../../../shared/world/maps";
 import { flag } from "../flags";
 
 export interface TitleScene {
@@ -55,7 +56,7 @@ export const DEFER_KONG = !!flag("deferkong") && flag("prewarm") !== "full";
 export function createTitleScene(engine: Engine, plane: PlaneProps, kits: TitleKits): TitleScene {
   const group = new THREE.Group(); group.name = "title-scene"; engine.scene.add(group);
   const T = engine.terrain;
-  const F = { ...FRAME, ...((globalThis as { __krTitle?: Partial<typeof FRAME> }).__krTitle ?? {}) };
+  const F = { ...FRAME, art: isSunburst() ? "../maps/keyart-sunburst.webp" : FRAME.art, ...((globalThis as { __krTitle?: Partial<typeof FRAME> }).__krTitle ?? {}) };
   let hero: KongActor | null = null;
   let pendingOutfit: KongOutfit | null = (() => {
     const p = loadPlayerOutfit();

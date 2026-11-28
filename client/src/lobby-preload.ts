@@ -5,6 +5,7 @@
 import type { Engine } from "./engine/engine";
 import { resources } from "./engine/res/scope";
 import { workerPool } from "./engine/worker-pool";
+import { isSunburst } from "../../shared/world/maps";
 
 export interface LobbyPreloadState {
   stage: string;
@@ -59,6 +60,12 @@ export async function startLobbyPreload(
     warmImpostors(),
     import("./engine/ktx2-tex").then((m) => m.warmKtx2Manifest()),
   ]))) return;
+  if (isSunburst()) {
+    state.stage = "done";
+    state.done = true;
+    state.totalMs = Math.round(performance.now() - tAll);
+    return;
+  }
   await idleGap(80);
 
   // 2. Town kit procedural textures in Web Workers (6 POIs: mango-market, coconut-cove, stilt-town, canopy-line,

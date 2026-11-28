@@ -44,6 +44,19 @@ const GLYPH: Record<string, Ink> = {
   "coco-caves": (g) => { poly(g, [-10, 8, -7, -4, -2, -8, 4, -7, 9, -2, 10, 8]); g.fill(); g.save(); g.fillStyle = "#ffd21f"; g.beginPath(); g.moveTo(-4.5, 8); g.lineTo(-4.5, 2); g.arc(0, 2, 4.5, Math.PI, 0); g.lineTo(4.5, 8); g.closePath(); g.fill(); g.restore(); },
   // wreck bay: an anchor
   "wreck-bay": (g) => { g.beginPath(); g.arc(0, -7, 2.2, 0, Math.PI * 2); g.stroke(); line(g, [0, -4.8, 0, 8]); line(g, [-4, -2, 4, -2]); g.beginPath(); g.arc(0, 2, 7, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke(); },
+  // ---- Sunburst Canyon desert landmark glyphs
+  "banana-pyramid": (g) => { poly(g, [-9.5, 8, 0, -8.5, 9.5, 8]); g.fill(); g.save(); g.strokeStyle = "#ffd21f"; g.lineWidth = 1.4; line(g, [-5, 3, 5, 3]); line(g, [-3, -1, 3, -1]); g.restore(); },
+  "emerald-oasis": (g) => { line(g, [-2, 4, 0, -5]); for (const a of [-2.5, -1.7, -0.7, 0.2]) line(g, [0, -5, Math.cos(a) * 6.5, -5 + Math.sin(a) * 4.5 + 1.5]); g.beginPath(); g.ellipse(0, 6, 8.5, 2.8, 0, 0, Math.PI * 2); g.fill(); },
+  "sunburst-bazaar": (g) => { g.beginPath(); g.arc(0, -2, 6, Math.PI, 0); g.lineTo(6, 8); g.lineTo(-6, 8); g.closePath(); g.fill(); line(g, [0, -10, 0, -7]); g.save(); g.fillStyle = "#ffd21f"; g.beginPath(); g.arc(0, 4, 2.6, Math.PI, 0); g.lineTo(2.6, 8); g.lineTo(-2.6, 8); g.fill(); g.restore(); },
+  "redrock-canyon": (g) => { poly(g, [-10, 8, -10, -7, -4, -7, -2, 4, 2, 4, 4, -7, 10, -7, 10, 8]); g.fill(); line(g, [-6, -3, 6, -3]); },
+  "mesa-citadel": (g) => { g.fillRect(-8, -2, 16, 10); for (const x of [-8, -3, 2, 5.5]) g.fillRect(x, -6.5, 2.6, 4.5); g.save(); g.fillStyle = "#ffd21f"; g.fillRect(-2.2, 2.5, 4.4, 5.5); g.restore(); },
+  "dune-refinery": (g) => { poly(g, [-7, 8, -4.5, -8, -1.5, -8, 1, 8]); g.fill(); g.fillRect(2.5, -1, 6.5, 9); g.beginPath(); g.ellipse(5.75, -1, 3.25, 1.5, 0, 0, Math.PI * 2); g.fill(); },
+  "skyship-wreck": (g) => { g.save(); g.rotate(-0.22); g.beginPath(); g.ellipse(0, -1, 9, 4.4, 0, 0, Math.PI * 2); g.fill(); g.fillRect(-3, 3.4, 6, 2.6); g.restore(); },
+  "cactus-gulch": (g) => { g.fillRect(-1.8, -8, 3.6, 16.5); g.fillRect(-6.5, -4, 4.8, 2.4); g.fillRect(-6.5, -6.5, 2.4, 4.5); g.fillRect(1.7, -1, 4.8, 2.4); g.fillRect(4.1, -5, 2.4, 6.2); },
+  "solar-spire": (g) => { poly(g, [-2.5, 8, -1.4, -4, 1.4, -4, 2.5, 8]); g.fill(); disc(g, 0, -5.5, 2.6); for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; line(g, [Math.cos(a) * 4.2, -5.5 + Math.sin(a) * 4.2, Math.cos(a) * 7.2, -5.5 + Math.sin(a) * 7.2]); } },
+  "mirage-docks": (g) => { poly(g, [-8, 3, 8, 3, 5.5, 7.5, -5.5, 7.5]); g.fill(); poly(g, [-1, 2, -1, -8, 7, 1]); g.fill(); line(g, [-9, 8.5, 9, 8.5]); },
+  "scorpion-arch": (g) => { poly(g, [-9.5, 8, -8.5, -4, -3, -8, 3, -8, 8.5, -4, 9.5, 8]); g.fill(); g.save(); g.fillStyle = "#ffd21f"; g.beginPath(); g.arc(0, 8, 5, Math.PI, 0); g.fill(); g.restore(); },
+  "bone-ridge": (g) => { line(g, [-8, 7, 8, 7]); for (const x of [-5.5, 0, 5.5]) { g.beginPath(); g.arc(x, 6, 3.2, Math.PI, 0); g.stroke(); } disc(g, 0, -5, 3); },
 };
 
 /** a POI badge centred on (x, y), radius r (px) */

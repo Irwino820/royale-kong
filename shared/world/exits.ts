@@ -264,10 +264,11 @@ export const EXIT_SITES: ExitSite[] = [
   { id: "lab-river", x: 51.5, z: -419.5, side: -1, note: "river bank below CNVS Lab: 25 m valley wall" },
 ];
 
+import { isSunburst } from "./maps";
 /** the BAKED layouts (shared/world/exits-layout.ts, written by an offline bake from EXIT_SITES against the
  *  full static world — rocks, trunks and POI boxes are obstacles the stairs route around — and checked there with the
  *  real mover). Baked numbers, not a runtime solve, so the server and every client build bit-identical colliders. */
-export function exitLayouts(_t?: ExitGround): ExitLayout[] { return EXIT_OPTS.off ? [] : EXIT_LAYOUTS; }
+export function exitLayouts(_t?: ExitGround): ExitLayout[] { return EXIT_OPTS.off || isSunburst() ? [] : EXIT_LAYOUTS; }
 /** tools only: build a world WITHOUT the exits (the bake measures the ground the stairs must avoid) */
 export const EXIT_OPTS = { off: false };
 /** every exit's colliders, in layout order — shared/sim/static-world.ts adds them to the static world (server + client) */

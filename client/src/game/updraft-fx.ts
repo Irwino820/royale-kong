@@ -9,7 +9,7 @@ import { UPDRAFT, updraftLift, updraftR } from "../../../shared/sim/updraft";
 
 type PlayFn = (s: Sfx, o: { pos?: [number, number, number]; loopId?: string; volume?: number; rate?: number }) => void;
 
-const U = UPDRAFT, H = U.top - U.floor;
+const U = UPDRAFT;
 
 const SLEEVE_VS = /* glsl */ `
   varying vec2 vUv; varying float vY; varying vec3 vN; varying vec3 vW;
@@ -67,13 +67,13 @@ const ASH_FS = /* glsl */ `
     float k = (1.0 - d * 4.0) * smoothstep(0.02, 0.12, vH) * (1.0 - smoothstep(0.75, 1.0, vH)) * vF * 0.7;
     gl_FragColor = vec4(vec3(0.24, 0.22, 0.21), k); }`;
 
-function motes(n: number, seed: number) {
+function motes(n: number, seed: number, h: number) {
   const g = new THREE.BufferGeometry(), a = new Float32Array(n * 4);
   let s = seed; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
   for (let i = 0; i < n; i++) { a[i * 4] = rnd(); a[i * 4 + 1] = rnd() * Math.PI * 2; a[i * 4 + 2] = rnd(); a[i * 4 + 3] = rnd(); }
   g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 3), 3));
   g.setAttribute("aS", new THREE.BufferAttribute(a, 4));
-  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, H / 2, 0), H / 2 + U.rAbove);
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, h / 2, 0), h / 2 + U.rAbove);
   return g;
 }
 
@@ -85,6 +85,7 @@ export class UpdraftFx {
   private readonly pos: [number, number, number] = [0, 0, 0];
 
   constructor(scene: THREE.Scene) {
+    const H = U.top - U.floor;
     const g = this.group; g.name = "volcano-updraft"; g.position.set(U.x, U.floor, U.z);
     // the sleeve: an open cone from the vent to the top (two of them, slightly different radii, read as depth)
     for (const k of [0, 1]) {
@@ -97,8 +98,8 @@ export class UpdraftFx {
       g.add(m);
     }
     const common = { uT: this.t, uH: { value: H }, uR0: { value: U.rFloor * 0.8 }, uR1: { value: U.rAbove * 0.85 } };
-    const embers = new THREE.Points(motes(260, 7), new THREE.ShaderMaterial({ uniforms: { ...common, uSize: { value: 0.09 }, uSpd: { value: 34 } }, vertexShader: MOTE_VS, fragmentShader: EMBER_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-    const ash = new THREE.Points(motes(420, 11), new THREE.ShaderMaterial({ uniforms: { ...common, uSize: { value: 0.16 }, uSpd: { value: 26 } }, vertexShader: MOTE_VS, fragmentShader: ASH_FS, transparent: true, depthWrite: false, fog: false }));
+    const embers = new THREE.Points(motes(260, 7, H), new THREE.ShaderMaterial({ uniforms: { ...common, uSize: { value: 0.09 }, uSpd: { value: 34 } }, vertexShader: MOTE_VS, fragmentShader: EMBER_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    const ash = new THREE.Points(motes(420, 11, H), new THREE.ShaderMaterial({ uniforms: { ...common, uSize: { value: 0.16 }, uSpd: { value: 26 } }, vertexShader: MOTE_VS, fragmentShader: ASH_FS, transparent: true, depthWrite: false, fog: false }));
     embers.name = "updraft-embers"; ash.name = "updraft-ash"; embers.renderOrder = 5; ash.renderOrder = 4;
     g.add(embers, ash);
     scene.add(g);

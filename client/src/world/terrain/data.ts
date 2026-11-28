@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { releaseAfterUpload } from "../../engine/texture-release";
 import { onRestore } from "../../engine/res/restore";
 import { Biome, POIS, WORLD } from "../../../../shared/world/map";
+import { isSunburst } from "../../../../shared/world/maps";
 import { Simplex2, smoothstep } from "../../../../shared/world/noise";
 import { HARBOR_APRON, MURK, RIVER, VOLCANO, cliffSkins, poiGroundAt, badlandsAt, kipukaAt, groundWarp, lagoonShoreAt, lavaChannels, padWeight, pathLines, plantationAt, reefPatch, type LavaLine, type TerrainData } from "../../../../shared/world/terrain-gen";
 import type { TerrainGpuData } from "./material";
@@ -127,6 +128,7 @@ export function computeGpuRows(t: TerrainData, lava: LavaLine[], i0: number, i1:
   const hs = t.heights, w = new Float32Array(12);
   const pads = POIS.filter((p) => p.padY !== null && p.id !== "peel-harbor" && p.id !== "the-plantation" && p.id !== "lobby-islet");
   const V = VOLCANO;
+  const desert = isSunburst();
   for (let i = i0; i < i1; i++) {
     const z = -H + i * C, iz = Math.min(res - 2, Math.max(1, i));
     for (let j = 0; j < res; j++) {
@@ -138,6 +140,46 @@ export function computeGpuRows(t: TerrainData, lava: LavaLine[], i0: number, i1:
       const coast = t.coast[k], path = t.path[k] / 255, b = t.biome[k];
       data[(k - o0) * 4] = Math.round((nx * 0.5 + 0.5) * 255); data[(k - o0) * 4 + 1] = Math.round((nz * 0.5 + 0.5) * 255);
       data[(k - o0) * 4 + 2] = t.path[k]; data[(k - o0) * 4 + 3] = Math.round((cav[k] * 0.5 + 0.5) * 255);
+
+      if (desert) {
+        info[(k - o0) * 4] = Math.round((Math.max(-127, Math.min(127, coast)) + 127) / 254 * 255);
+        info[(k - o0) * 4 + 1] = 0; info[(k - o0) * 4 + 2] = 0; info[(k - o0) * 4 + 3] = 255;
+        w.fill(0);
+        if (h < 0) {
+          const shallow = smoothstep(-4.0, -0.2, h);
+          w[SAND] = 0.55 + 0.35 * shallow; w[REEF] = 0.45 - 0.35 * shallow;
+          w[CLIFF] += smoothstep(0.75, 1.35, slope) * 1.4;
+        } else {
+          switch (b) {
+            case Biome.Beach: w[SAND] = 1; break;
+            case Biome.Grass: {
+              const drift = smoothstep(0.25, 0.72, nE.fbm(x / 42, z / 42, 3) * 0.5 + 0.5);
+              w[GRASS] = 0.72 + 0.28 * (1 - drift); w[SAND] = 0.28 * drift; break;
+            }
+            case Biome.Jungle: w[JUNGLE] = 0.85; w[SAND] = 0.15; break; // Lush Emerald Oasis ring!
+            case Biome.Path: w[PATH] = 0.85; w[SAND] = 0.15; break;
+            case Biome.Farmland: w[FARM] = 0.92; w[SAND] = 0.08; break; // Ancient Sandstone Courtyard Plaza!
+            case Biome.Paved: w[FARM] = 0.65; w[PATH] = 0.35; break;
+            case Biome.Lagoon: w[MUD] = 0.82; w[SAND] = 0.18; break; // Cracked Desert Alkali Dry Wash!
+            case Biome.Cinder: w[CINDER] = 0.72; w[BASALT] = 0.28; break; // Crimson Mesa Caprock!
+            case Biome.Rock: w[CLIFF] = 0.72; w[ROCK] = 0.28; break;
+            default: w[SAND] = 1;
+          }
+          // Steep canyon walls & mesas read as crisp stratified terracotta redrock!
+          const rockAmt = smoothstep(0.55, 1.05, slope);
+          if (rockAmt > 0) {
+            for (let q = 0; q < 12; q++) w[q] *= 1 - rockAmt;
+            const strataMix = smoothstep(26, 48, h);
+            w[CLIFF] += rockAmt * (0.76 - 0.26 * strataMix);
+            w[ROCK] += rockAmt * 0.24;
+            w[BASALT] += rockAmt * 0.26 * strataMix;
+          }
+        }
+        let s = 0; for (let q = 0; q < 12; q++) s += w[q];
+        const f = s > 0 ? 1 / s : 0;
+        for (let q = 0; q < 12; q++) W[q][k - o0] = w[q] * f;
+        continue;
+      }
 
       const vr = Math.hypot(x - V.x, z - V.z);
       // kipukas: the vegetated islands in the lava field (biome Grass / Jungle there) are not badlands ground

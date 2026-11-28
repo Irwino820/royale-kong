@@ -3,11 +3,16 @@
 // The boot (main.ts) starts EVERY import at once (network + parse overlap the CPU builds) and builds in this order.
 import type { WorldModule } from "./module";
 import type { PoiId } from "../../../shared/world/map";
+import { isSunburst, SUNBURST_POIS } from "../../../shared/world/maps";
 
 type Loader = () => Promise<{ default: WorldModule }>;
 const poi = (id: PoiId): [string, Loader] => [`poi:${id}`, () => import(`./pois/${id}/index.ts`)];
+const sbPoi = (id: PoiId): [string, Loader] => [
+  `poi:${id}`,
+  () => import("./pois/sunburst/index").then((m) => ({ default: m.makeSunburstPoiModule(id) })),
+];
 
-export const MODULES: Array<[string, Loader]> = [
+const KONG_MODULES: Array<[string, Loader]> = [
   ["atmos", () => import("./atmos/index")],
   ["terrain", () => import("./terrain/index")],
   ["water", () => import("./water/index")],
@@ -22,6 +27,19 @@ export const MODULES: Array<[string, Loader]> = [
   ["interiors", () => import("./pois/_kit/interior-showcase")],   // interiors area: int-* views (build is a no-op; stage builds)
   ["gameplay-stage", () => import("../game/stage")],
 ];
+
+const SUNBURST_MODULES: Array<[string, Loader]> = [
+  ["atmos", () => import("./atmos/index")],
+  ["terrain", () => import("./terrain/index")],
+  ["water", () => import("./water/index")],
+  ["veg", () => import("./veg/index")],
+  ...SUNBURST_POIS.map((p) => sbPoi(p.id)),
+  ["showcase", () => import("../actors/showcase")],
+  ["weapons-showcase", () => import("../weapons/showcase")],
+  ["gameplay-stage", () => import("../game/stage")],
+];
+
+export const MODULES: Array<[string, Loader]> = isSunburst() ? SUNBURST_MODULES : KONG_MODULES;
 
 /**
  * Modules the GAME page builds before the title is ready (the title / lobby camera stands on the lobby islet looking

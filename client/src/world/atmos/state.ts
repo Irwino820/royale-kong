@@ -4,8 +4,9 @@
 import * as THREE from "three";
 import type { GradeParams } from "./grade";
 import { flag } from "../../flags";
+import { isSunburst } from "../../../../shared/world/maps";
 
-export type PresetId = "midday" | "dawn" | "night" | "rain" | "jungle";
+export type PresetId = "midday" | "dawn" | "night" | "rain" | "jungle" | "desert" | "sunset" | "sandstorm";
 
 export interface AtmosPreset {
   id: PresetId;
@@ -158,8 +159,11 @@ export interface AtmosPreset {
 export const lin = (hex: string) => new THREE.Color(hex);
 
 export const PRESETS: Record<PresetId, AtmosPreset> = {
-  // (filled right below the literal: the staged jungle light derives from midday)
+  // (filled right below the literal: derived presets)
   jungle: null as unknown as AtmosPreset,
+  desert: null as unknown as AtmosPreset,
+  sunset: null as unknown as AtmosPreset,
+  sandstorm: null as unknown as AtmosPreset,
   midday: {
     id: "midday",
     sunElev: 42, sunAz: -32,
@@ -318,6 +322,54 @@ export const PRESETS: Record<PresetId, AtmosPreset> = {
 // forward scattering is ~1/5 of a backlit view: the view stages the sun ahead-left of the path (like the target art)
 // with a denser forest medium. Everything else is midday.
 PRESETS.jungle = { ...PRESETS.midday, id: "jungle", sunElev: 42, sunAz: 22, shafts: 2.0, shaftCanopy: 0.09, shaftDist: 45, shaftG: 0.5, shaftCap: 0.28 };
+// SUNBURST CANYON desert atmosphere presets: vivid desert sun, blazing canyon golden hour, and golden sandstorm!
+PRESETS.desert = {
+  ...PRESETS.midday,
+  id: "desert",
+  sunElev: 52, sunAz: -38,
+  sunColor: "#fff1cf", sunIntensity: 5.4,
+  sky: [[0, "#f5ddb0"], [5, "#e6d2ad"], [12, "#8ec5e6"], [24, "#4b9ad6"], [45, "#2371bd"], [70, "#1555a4"], [90, "#0f428a"]],
+  glowColor: "#fff3c4", glow: 1.15, glowSize: 0.18, discDeg: 1.4, rays: 0.35, glare: 0.28,
+  sunHorizon: "#ffe4a8", sunHorizonAmt: 0.45,
+  cirrus: 0.22, cirrusOpacity: 0.22, cirrusLit: "#fff8ea", cirrusShade: "#c8b498",
+  envZenith: "#5aa0e0", envHorizon: "#f2d6a4", groundHorizon: "#d6a468", groundNadir: "#9e6e3e",
+  envIntensity: 0.72, envGlow: 0.35,
+  hazeColor: "#e8cfa2", hazeDensity: 1 / 2800, hazeHeight: 520, hazeSun: 0.9,
+  fogColor: "#eccfa0", fogDensity: 0.00028, fogHeight: 28,
+  exposure: 1.0, saturation: 1.14, contrast: 1.16, warmth: 0.10, shadeWarmth: 0.12, bloom: 0.32,
+  warmBounce: 1.25, vegTint: "#d6dc9e", vegSat: 0.96,
+};
+PRESETS.sunset = {
+  ...PRESETS.dawn,
+  id: "sunset",
+  sunElev: 16, sunAz: -78,
+  sunColor: "#ffc47c", sunIntensity: 5.2,
+  sky: [[0, "#f9be72"], [6, "#f09052"], [14, "#d26c58"], [26, "#8c5772"], [48, "#414c7c"], [75, "#243462"], [90, "#1a2850"]],
+  glowColor: "#ffd482", glow: 1.45, glowSize: 0.24, discDeg: 1.8, rays: 0.55, glare: 0.42,
+  sunHorizon: "#ffaa5c", sunHorizonAmt: 0.75,
+  envZenith: "#707cb0", envHorizon: "#f6b472", groundHorizon: "#c47d44", groundNadir: "#7d4a28",
+  hazeColor: "#e8a46c", hazeDensity: 1 / 1950, hazeHeight: 420, hazeSun: 1.15,
+  fogColor: "#e8a870", fogDensity: 0.00045, fogHeight: 35,
+  exposure: 1.02, saturation: 1.18, contrast: 1.18, warmth: 0.18, shadeWarmth: 0.16, bloom: 0.42,
+  warmBounce: 1.35, vegTint: "#d8c48a", vegSat: 0.92,
+};
+PRESETS.sandstorm = {
+  ...PRESETS.desert,
+  id: "sandstorm",
+  sunElev: 34, sunAz: -52,
+  sunColor: "#ffd79c", sunIntensity: 3.6,
+  sky: [[0, "#d4a66a"], [8, "#cc9c60"], [18, "#be905c"], [35, "#a8825a"], [60, "#8f7558"], [90, "#7c6b58"]],
+  glowColor: "#ffe2a8", glow: 0.85, glowSize: 0.28, discDeg: 2.2, rays: 0.2, glare: 0.25,
+  sunHorizon: "#dfb276", sunHorizonAmt: 0.65,
+  cloudLit: "#e8c492", cloudShade: "#9e7a52", cloudTop: "#d8b482", cloudBase: "#8a6844", cloudOpacity: 0.85,
+  envZenith: "#b49066", envHorizon: "#d6ad78", groundHorizon: "#b8874e", groundNadir: "#7c5630",
+  envIntensity: 0.68, envGlow: 0.25,
+  hazeColor: "#d6a468", hazeDensity: 1 / 520, hazeHeight: 380, hazeSun: 0.95,
+  fogColor: "#d9aa6e", fogDensity: 0.0022, fogHeight: 65,
+  exposure: 0.96, saturation: 1.04, contrast: 1.12, warmth: 0.20, shadeWarmth: 0.16, bloom: 0.30,
+  rainStreaks: 0.45, puddles: 0.0, wet: 0.0, rainbow: 0.0,
+  vegTint: "#c4b686", vegSat: 0.84,
+};
 
 /** the composite's grade parameters for a preset (grade.ts replica) */
 export function gradeParams(p: AtmosPreset): GradeParams {
@@ -339,7 +391,7 @@ export class AtmosState {
   readonly cloudDrift = new THREE.Vector2();
   readonly listeners: Array<(s: AtmosState) => void> = [];
 
-  constructor() { this.apply(PRESETS.midday); }
+  constructor() { this.apply(isSunburst() ? PRESETS.desert : PRESETS.midday); }
 
   apply(p: AtmosPreset) {
     // dev: ?sun=elev,az overrides the preset's sun (lighting experiments / comparing alternatives)

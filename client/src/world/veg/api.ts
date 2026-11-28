@@ -3,7 +3,7 @@
 // Always call defensively: `(ctx.shared.get("veg") as VegApi | undefined)?.plant(...)`.
 import type * as THREE from "three";
 
-export type PlantKind = "palm" | "palm-leaning" | "jungle-tree" | "bush" | "fern" | "monstera" | "banana-plant" | "flowers" | "grass" | "bamboo" | "mangrove" | "log" | "groundcover" | "vine";
+export type PlantKind = "palm" | "palm-leaning" | "jungle-tree" | "bush" | "fern" | "monstera" | "banana-plant" | "flowers" | "grass" | "bamboo" | "mangrove" | "log" | "groundcover" | "vine" | "cactus" | "prickly-pear";
 
 /** veg quality tier (the video settings' "foliage" / view distance) */
 export type VegQuality = "low" | "medium" | "high" | "epic";

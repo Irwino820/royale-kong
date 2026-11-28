@@ -17,6 +17,7 @@
 // Every kept spot passes validateSpot: a walkable floor right under it, its own volume free of colliders, and a place the
 // kong can STAND within reach of it with a clear line from the eyes.
 import { POIS } from "../world/map";
+import { isSunburst } from "../world/maps";
 import { PICKUP_DIST, PLAYER_H, PLAYER_R, SLOPE_LIMIT } from "./const";
 import { makeHit, type StaticWorld } from "./world";
 import { hotZonesById, interiorRoomsById, lootSpotsById, type HotZone, type KitRoomLite } from "../pois/index";
@@ -25,7 +26,7 @@ import { furnishRoom, type InteriorRoom } from "../pois/interior-kit";
 import { swampWaterAt } from "../pois/the-murk";
 import { AMMO_CRATE, CHEST_CRATE, type CrateShape } from "./crate";
 import { pathLines } from "../world/terrain-gen";
-import { ZIP_LINES } from "./zipline";
+import { activeZipLines } from "./zipline";
 import * as dmath from "./dmath";
 export { AMMO_CRATE, CHEST_CRATE, type CrateShape };
 
@@ -108,7 +109,10 @@ export const reachTime = (ax: number, ay: number, az: number, bx: number, by: nu
 /** POI tier for rarity: hot drops 2, other named POIs 1, wilderness 0. The four hot drops — the town, the
  * shipyard, the temple vault and the lab — pay more: richer rarity tables, more of their chests live, vault-grade hero
  * chests (loot.ts). Peel Harbor joined them (its cranes and ship are the island's biggest landmark). */
-export const HOT_POIS = new Set(["banana-temple", "cnvs-lab", "mango-market", "peel-harbor"]);
+export const HOT_POIS = new Set([
+  "banana-temple", "cnvs-lab", "mango-market", "peel-harbor",
+  "banana-pyramid", "emerald-oasis", "sunburst-bazaar", "mesa-citadel", "solar-spire",
+]);
 export const poiTier = (poi: number) => poi < 0 ? 0 : HOT_POIS.has(POIS[poi].id) ? 2 : 1;
 
 const H = makeHit(), L = makeHit();
@@ -177,7 +181,7 @@ function floorAt(world: StaticWorld, x: number, y: number, z: number): number {
   if (H.y < 0.15 && H.box < 0) { FLOOR_WHY = "in the sea"; return NaN; }
   // nor under THE MURK's tea (the sim's sea is y 0, the swamp's drawn surface is 0.78 m): no chests or
   // guns knee-deep in the water of the channels
-  if (H.box < 0) { const sw = swampWaterAt(x, z); if (sw !== null && H.y < sw - 0.05) { FLOOR_WHY = "under the swamp water"; return NaN; } }
+  if (!isSunburst() && H.box < 0) { const sw = swampWaterAt(x, z); if (sw !== null && H.y < sw - 0.05) { FLOOR_WHY = "under the swamp water"; return NaN; } }
   const fy = H.y;
   world.velY = 0; world.headBump = false;
   // Both item-volume tolerances must clear; solver pushes near intersecting furniture need not be monotonic in radius.
@@ -1403,7 +1407,7 @@ function* roomUnits(world: StaticWorld, pi: number, sc: Scan, rooms: Room[], bui
     for (let k = 0; k < B.levels.length; k++) {
       // every chest slot the kit has in this storey's rooms (the POI's LOOT_SPOTS keep ~1 per 6 m) + the scan's
       const kitC: Cand[] = [];
-      for (const r of kits) { if (Math.abs(r.y - B.levels[k]) > 0.6) continue; const u = unitOf(r.x, r.y, r.z); if (u < u0 || units[u].bld !== B.id || dead.has(u)) continue; for (const q of furnishRoom(r as unknown as InteriorRoom).loot.chests) kitC.push({ kind: SpotKind.Chest, src: Src.Designed, x: q[0], y: q[1], z: q[2], yaw: q[3], poi: pi, room: -1, order: 5000, v: 0 }); }
+      for (const r of kits) { if (!(r as { style?: string }).style || Math.abs(r.y - B.levels[k]) > 0.6) continue; const u = unitOf(r.x, r.y, r.z); if (u < u0 || units[u].bld !== B.id || dead.has(u)) continue; for (const q of furnishRoom(r as unknown as InteriorRoom).loot.chests) kitC.push({ kind: SpotKind.Chest, src: Src.Designed, x: q[0], y: q[1], z: q[2], yaw: q[3], poi: pi, room: -1, order: 5000, v: 0 }); }
       const pool = [...cands, ...kitC].filter((c) => c.kind === SpotKind.Chest && c.v !== 2 && Math.abs(c.y - B.levels[k]) < 0.6 && (() => { const u = unitOf(c.x, c.y, c.z); return u >= u0 && units[u].bld === B.id && !dead.has(u); })())
         .sort((a, b) => (a.src - b.src) || (hash32(Math.round(a.x * 4), Math.round(a.z * 4)) - hash32(Math.round(b.x * 4), Math.round(b.z * 4))));
       let n = 0;
@@ -1554,7 +1558,7 @@ export function pathSpots(world: StaticWorld): PathSpot[] {
   const tryAt = (x: number, z: number, line: string, deckOnly: boolean): boolean => {
     const t = walkTop(world, x, z); if (!t || t.y < PATH_DRY || (deckOnly && !t.deck)) return false;
     if (!t.deck && world.terrain.normal(x, z)[1] < 0.85) return false;
-    if (!t.deck) { const sw = swampWaterAt(x, z); if (sw !== null && t.y < sw + 0.1) return false; }
+    if (!isSunburst() && !t.deck) { const sw = swampWaterAt(x, z); if (sw !== null && t.y < sw + 0.1) return false; }
     const v = validateSpot(world, SpotKind.Floor, x, t.y + 0.05, z);
     if (v.why) return false;
     out.push({ x: v.x, y: v.y, z: v.z, sx: STAND[0], sy: STAND[1], sz: STAND[2], kind: t.deck ? 1 : 0, line });
@@ -1587,7 +1591,7 @@ export function pathSpots(world: StaticWorld): PathSpot[] {
     }
   }
   // the zipline decks: a spot beside each pole, off the cable's line
-  for (const Z of ZIP_LINES) {
+  for (const Z of activeZipLines()) {
     for (const [px, py, pz, s] of [[Z.ax, Z.ya, Z.az, 1], [Z.bx, Z.yb, Z.bz, -1]] as const) {
       const ux = Z.dx / Z.Lh * s, uz = Z.dz / Z.Lh * s;
       let ok = false;

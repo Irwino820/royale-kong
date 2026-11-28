@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Climb } from "../../../shared/sim/climb";
 import { LADDERS, LANDINGS, type Landing } from "../../../shared/pois/ladders";
+import { isSunburst } from "../../../shared/world/maps";
 import { perchFor, type PerchDef } from "../../../shared/pois/climb-trees";
 import { releaseGeometryAfterUpload } from "../engine/geometry-release";
 
@@ -133,6 +134,8 @@ export class ClimbViews {
   readonly meshes: THREE.Mesh[] = [];
   private readonly mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 });
   constructor(scene: THREE.Scene, private readonly climbs: Climb[]) {
+    // Sunburst Canyon draws its own desert ladders in poi:sunburst and has no Kong Island Mist Falls cliff landings.
+    if (isSunburst()) return;
     const style = new Map<string, string>();
     for (const l of LADDERS) style.set(`${l.c.x.toFixed(2)},${l.c.z.toFixed(2)},${l.c.y1.toFixed(2)}`, l.style);
     const cells = new Map<string, { climbs: Climb[]; landings: Landing[] }>();

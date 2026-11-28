@@ -6,22 +6,32 @@
 // lift the same kong the same way (shared/sim/player.ts stepAir / stepPlayer). No allocations.
 import { layout } from "../pois/ripe-peak";
 import { PEAK_C } from "../pois/jungle-layout";
+import { SUNBURST_UPDRAFT } from "../pois/sunburst/index";
+import { isSunburst } from "../world/maps";
 
 const S = layout.summit;
-export const UPDRAFT = {
-  /** the vent (the summit crater's axis) */
+const KONG_UPDRAFT = {
   x: PEAK_C.x, z: PEAK_C.z,
-  /** crater floor / lip (y) */
   floor: S.floor, lip: S.y1,
-  /** the column tops out here (≈ 260 m over the lip, ≈ 560 m above the sea — the redeploy height over most of the island) */
   top: S.y1 + 245,
-  /** the column's radius: at the crater floor (the vent — the floor's outer ring, where the crater chest sits, stays
-   *  standable), at the lip, and above it */
   rFloor: 4.6, rLip: 13, rAbove: 15,
-  /** lift: target climb speed (m/s) in the core, the soft edge (m), the fade band under the top (m) */
   v: 44, edge: 3, fade: 45,
-  /** the kick a kong standing / walking into the vent gets (m/s up) */
   kick: 16,
+};
+const activeU = () => (isSunburst() ? SUNBURST_UPDRAFT : KONG_UPDRAFT);
+export const UPDRAFT = {
+  get x() { return activeU().x; },
+  get z() { return activeU().z; },
+  get floor() { return activeU().floor; },
+  get lip() { return activeU().lip; },
+  get top() { return activeU().top; },
+  get rFloor() { return activeU().rFloor; },
+  get rLip() { return activeU().rLip; },
+  get rAbove() { return activeU().rAbove; },
+  get v() { return activeU().v; },
+  get edge() { return activeU().edge; },
+  get fade() { return activeU().fade; },
+  get kick() { return activeU().kick; },
 };
 
 /** column radius at height y */

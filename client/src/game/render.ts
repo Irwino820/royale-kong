@@ -24,7 +24,7 @@ import { ClientMatch, type EventSink, type Remote } from "./client";
 import type { GameInput } from "./input";
 import { AMMO_TYPES, B, PS, SK, consumableId, weaponId, rarityOf, eyeY as simEyeY, canPullChute, FF_DOWN, FF_DIVE_DOWN, type Player } from "../../../shared/sim/player";
 import { PLANE_OPEN_S, FREEFALL_FOV, FREEFALL_FOV_MAX, GLIDE_FOV, PLANE_FOV } from "../../../shared/sim/plane";
-import { ZIP_LINES, zipNear } from "../../../shared/sim/zipline";
+import { activeZipLines, zipNear } from "../../../shared/sim/zipline";
 import { PLANE_BAY_S, CHUTE_CUT_HOLD_S, CONSUMABLE_DEFS, DT, PLANE_ALT, PLANE_SPEED, WEAPON_DEFS, SPRINT, SOLO_REDEPLOYS, WARMUP_S, resurgenceDelay, scopeSway, SCOPE_SWAY } from "../../../shared/sim/const";
 import { makeShotResult } from "../../../shared/sim/hitscan";
 import { weaponDef, currentSpread } from "../../../shared/sim/player";
@@ -3484,7 +3484,7 @@ const boxHull = () => (boxHullG ??= new THREE.BoxGeometry(0.78, 0.44, 0.46).tran
 /** a zipline pole + its hanging T-bar (canopy-line/structures.ts addZip), world space; k = line * 2 + end (zipNear) */
 function zipHull(k: number): THREE.BufferGeometry {
   let g = zipHulls.get(k); if (g) return g;
-  const L = ZIP_LINES[k >> 1], e = k & 1;
+  const L = activeZipLines()[k >> 1], e = k & 1;
   const px = e ? L.bx : L.ax, py = e ? L.by : L.ay, pz = e ? L.bz : L.az, deck = e ? L.yb : L.ya;
   const qx = e ? L.ax : L.bx, qz = e ? L.az : L.bz, l = Math.hypot(qx - px, qz - pz), ux = (qx - px) / l, uz = (qz - pz) / l;
   const pole = new THREE.CylinderGeometry(0.17, 0.17, py + 0.35 - (deck - 0.4), 10).translate(px, (py + 0.35 + deck - 0.4) / 2, pz);
@@ -3505,6 +3505,9 @@ const POI_THEME: Record<string, PoiTheme> = {
   "coconut-cove": "coast", "stilt-town": "coast", "lookout-point": "coast", "wreck-bay": "coast", "peel-harbor": "harbor", "the-wreck": "harbor",
   "canopy-line": "jungle", "banana-temple": "temple", "ripe-peak": "volcano", "mango-market": "town", "the-plantation": "town",
   "the-murk": "swamp", "cnvs-lab": "lab", "peel-strip": "lab", "coco-caves": "caves", "mist-falls": "caves",
+  "banana-pyramid": "temple", "emerald-oasis": "coast", "sunburst-bazaar": "town", "redrock-canyon": "volcano",
+  "mesa-citadel": "temple", "dune-refinery": "lab", "skyship-wreck": "harbor", "cactus-gulch": "town",
+  "solar-spire": "lab", "mirage-docks": "harbor", "scorpion-arch": "caves", "bone-ridge": "caves",
 };
 /** the location banner's sub-line per POI */
 const POI_TAGLINE: Record<string, string> = {
@@ -3512,4 +3515,7 @@ const POI_TAGLINE: Record<string, string> = {
   "the-murk": "Mangrove swamp", "banana-temple": "Ancient ruins", "ripe-peak": "The volcano", "mist-falls": "Waterfall gorge",
   "cnvs-lab": "Research lab", "canopy-line": "Treetop ziplines", "peel-strip": "Airstrip", "the-plantation": "Banana farm",
   "lookout-point": "Lighthouse cliffs", "the-wreck": "Banana Co. freighter", "coco-caves": "Sea caves", "wreck-bay": "Shipwreck cove",
+  "banana-pyramid": "Golden pharaoh vault", "emerald-oasis": "Turquoise lagoon", "sunburst-bazaar": "Desert souk & minaret", "redrock-canyon": "Thermal updraft gorge",
+  "mesa-citadel": "Red-rock cliff fortress", "dune-refinery": "Oil rigs & helipad", "skyship-wreck": "Crashed banana zeppelin", "cactus-gulch": "Frontier canyon town",
+  "solar-spire": "Heliostat mirror array", "mirage-docks": "Coastal caravan pier", "scorpion-arch": "Natural sandstone arch", "bone-ridge": "Colossal fossil dig",
 };

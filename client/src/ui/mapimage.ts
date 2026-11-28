@@ -4,6 +4,7 @@
 import type { CreateMapImage, MapImage } from "./api";
 import { DEEP_SEA_CSS, paintMap, type MapPaintInput } from "./mappaint";
 import { terrainData } from "../world/terrain/load";
+import { activeMapId, isSunburst } from "../../../shared/world/maps";
 import { uiAsset } from "./styles";
 import { FALLS } from "../../../shared/pois/jungle-falls";
 import { paintRender, type MapRenderWater } from "./maprender";
@@ -65,7 +66,7 @@ export const createMapImage: CreateMapImage = (terrain, sizePx): PaintedMap => {
   };
   // (perf: the 4096² render's decode and scale ran on the main thread in onload, ~0.7 s; a worker now decodes it with
   // createImageBitmap, paints the finished map on an OffscreenCanvas and hands back a map-sized bitmap to copy)
-  const renderReady = new Promise<void>((resolve) => {
+  const renderReady = isSunburst() ? Promise.resolve() : new Promise<void>((resolve) => {
     if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined" || typeof createImageBitmap === "undefined") { renderHere(resolve); return; }
     try {
       const w = new Worker(new URL("./maprenderworker.ts", import.meta.url), { type: "module" });
@@ -99,7 +100,7 @@ export const createMapImage: CreateMapImage = (terrain, sizePx): PaintedMap => {
         w.terminate();
       };
       w.onerror = (ev) => { console.warn("[ui] map worker error", ev.message); w.terminate(); mainThread().catch(() => {}).finally(done); };
-      w.postMessage(inp);
+      w.postMessage({ ...inp, mapId: activeMapId() });
     } catch { mainThread().catch(() => {}).finally(done); }
   });
   shared = map;

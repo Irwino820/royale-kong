@@ -443,7 +443,7 @@ const mod: WorldModule & { views: Record<string, CamSpec> } = {
           // (no spray in calm water — THE MURK's swamp, the Stilt Town / NE lagoon, the harbor basin, the two emerald
           //  lagoons: a white burst next to a moored boat in the tea water read as a glitch)
           {
-            const mk = fields.masks, calmPois = POIS.filter((p) => p.id === "stilt-town" || p.id === "the-murk");
+            const mk = fields.masks, calmPois = POIS.filter((p) => p.id === "stilt-town" || p.id === "the-murk" || p.id === "emerald-oasis");
             const inDisc = (x: number, z: number, d: readonly number[], pad = 0) => d[2] > 0 && Math.hypot(x - d[0], z - d[1]) < d[2] + pad;
             const hb = mk.harbor;
             const keepPt = (p: SprayPoint) => !(inDisc(p.x, p.z, mk.murk, 40) || inDisc(p.x, p.z, mk.lagoon, 30) || inDisc(p.x, p.z, mk.lagoon2, 30)

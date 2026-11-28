@@ -19,6 +19,7 @@ import type { WorldCtx } from "../../engine/engine";
 import { SEED_GLSL } from "../../engine/dither";
 import { Simplex2, mulberry32 } from "../../../../shared/world/noise";
 import { WORLD } from "../../../../shared/world/map";
+import { isSunburst } from "../../../../shared/world/maps";
 import { ROCK_CARVE, STACK_CORNER, STACK_TAPER, terrainRocks, type RockInstance, type RockKind, type TerrainData } from "../../../../shared/world/terrain-gen";
 import { GLSL_COMMON, terrainCellTexture, terrainNoiseTexture } from "./material";
 import { sculptStack } from "./stackgeo";
@@ -876,7 +877,18 @@ export async function buildRocks(ctx: WorldCtx, t: TerrainData, arrays: LayerArr
   const ground = ctx.shared.get("terrainAlbedoMap") as THREE.Texture | undefined;
   SHARED.ground.value = ground ?? null; SHARED.groundOn.value.set(WORLD.HALF, ground ? 1 : 0);
   const group = new THREE.Group(); group.name = "terrain-rocks";
-  const OPTS: Record<Mat, Parameters<typeof rockMaterial>[2] & { layer: string }> = {
+  const desert = isSunburst();
+  const OPTS: Record<Mat, Parameters<typeof rockMaterial>[2] & { layer: string }> = desert ? {
+    block: { layer: "cliff", moss: 0, strata: true, wear: 0.7, tile: 1.1, nrm: 0.75, tint: [1.08, 0.92, 0.78], top: "sand", topMix: 0.65, capOnly: 1, grit: "sand", disp: carve("block") },
+    stack: { layer: "cliff", moss: 0, strata: true, wear: 0.75, tile: 1.1, nrm: 0.75, tint: [1.06, 0.88, 0.72], top: "sand", topMix: 0.55, capOnly: 1, grit: "sand", groundTint: false, disp: carve("stack", STACK_TAPER) },
+    slab: { layer: "rock", moss: 0, strata: true, wear: 0.8, tint: [1.08, 0.90, 0.75], top: "sand", topMix: 0.5, capOnly: 1, disp: carve("slab") },
+    basalt: { layer: "basalt", moss: 0, strata: true, wear: 0.8, gloss: 0.1, tile: 1.0, nrm: 0.7, tint: [1.05, 0.85, 0.72], top: "sand", topMix: 0.4, disp: carve("basalt") },
+    boulder: { layer: "rock", moss: 0, strata: false, wear: 0.9, tint: [1.10, 0.92, 0.76] },
+    crag: { layer: "basalt", moss: 0, strata: false, wear: 0.9, gloss: 0.1, tint: [1.02, 0.84, 0.70], nrm: 0.75, glow: false, bounce: 0.2 },
+    spire: { layer: "cliff", moss: 0, strata: true, wear: 1.0, tint: [1.08, 0.88, 0.72], nrm: 0.8, gloss: 0.1, bounce: 0.25, nearD: 150 },
+    shard: { layer: "rock", moss: 0, strata: false, wear: 0.8, gloss: 0.1, tint: [1.05, 0.86, 0.70], nrm: 0.5 },
+    tor: { layer: "cliff", moss: 0, strata: true, wear: 1.1, tint: [1.10, 0.88, 0.70], nrm: 0.85, gloss: 0.1, bounce: 0.25, nearD: 150 },
+  } : {
     // turf ONLY on cap blocks (column tops + deep ledges); other course tops are weathered sandstone
     // carved tiers: the displacement params per rock type (see DISP_PARS: band, groove, joint, erosion | recess,
     // joint spacing, joint coverage, top undulation)
